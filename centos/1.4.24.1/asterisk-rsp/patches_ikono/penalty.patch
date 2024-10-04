@@ -1,0 +1,135 @@
+--- apps/app_queue.c	2010-08-11 15:59:18.000000000 -0500
++++ apps/app_queue.c	2010-08-12 15:39:17.000000000 -0500
+@@ -334,6 +334,7 @@
+ 	int metric;
+ 	int oldstatus;
+ 	time_t lastcall;
++	time_t lastnoanswer;
+ 	struct member *member;
+ };
+ 
+@@ -374,6 +375,7 @@
+ 	int status;                         /*!< Status of queue member */
+ 	int paused;                         /*!< Are we paused (not accepting calls)? */
+ 	time_t lastcall;                    /*!< When last successful call was hungup */
++	time_t lastnoanswer;                 /*!< Last time we got no answer trying to call a member */
+ 	unsigned int dead:1;                /*!< Used to detect members deleted in realtime */
+ 	unsigned int delme:1;               /*!< Flag to delete entry on reload */
+ };
+@@ -443,6 +445,7 @@
+ 	int timeout;                        /*!< How long to wait for an answer */
+ 	int weight;                         /*!< Respective weight */
+ 	int autopause;                      /*!< Auto pause queue members if they fail to answer */
++	int notpresentpenalty;              /*!< How long do we want to wait before trying member again after a no-answer */
+ 
+ 	/* Queue strategy things */
+ 	int rrpos;                          /*!< Round Robin - position */
+@@ -462,6 +465,7 @@
+ 
+ static AST_LIST_HEAD_STATIC(queues, call_queue);
+ 
++static int set_member_last_noanswer(const char *interface);
+ static int set_member_paused(const char *queuename, const char *interface, int paused);
+ 
+ static void queue_transfer_fixup(void *data, struct ast_channel *old_chan, struct ast_channel *new_chan);
+@@ -1169,6 +1173,8 @@
+ 			q->montype = 1;
+ 	} else if (!strcasecmp(param, "autopause")) {
+ 		q->autopause = ast_true(val);
++	} else if (!strcasecmp(param, "notpresent-penalty")) {
++		q->notpresentpenalty = atoi(val);
+ 	} else if (!strcasecmp(param, "maxlen")) {
+ 		q->maxlen = atoi(val);
+ 		if (q->maxlen < 0)
+@@ -1952,6 +1958,15 @@
+ 		return 0;
+ 	}
+ 
++	if ((tmp->lastqueue && tmp->lastqueue->notpresentpenalty && (time(NULL) - tmp->lastnoanswer < tmp->lastqueue->notpresentpenalty)) || (!tmp->lastqueue && qe->parent->notpresentpenalty && (time(NULL) - tmp->lastnoanswer < qe->parent->notpresentpenalty))) {
++		 ast_debug(1, "'Not present' penalty time not yet expired for %s\n", tmp->interface);
++		 if (qe->chan->cdr)
++			ast_cdr_busy(qe->chan->cdr);
++		 tmp->stillgoing = 0;
++		 (*busies)++;
++		 return 0;
++	}
++
+ 	if (!qe->parent->ringinuse && (tmp->member->status != AST_DEVICE_NOT_INUSE) && (tmp->member->status != AST_DEVICE_UNKNOWN)) {
+ 		if (option_debug)
+ 			ast_log(LOG_DEBUG, "%s in use, can't receive call\n", tmp->interface);
+@@ -2235,7 +2250,10 @@
+ 
+ /*! \brief RNA == Ring No Answer. Common code that is executed when we try a queue member and they don't answer. */
+ static void rna(int rnatime, struct queue_ent *qe, char *interface, char *membername, int pause)
+-{
++{ 
++	/* Keep track of when we last didn't get an answer from this member */ 
++	set_member_last_noanswer(interface);
++
+ 	if (option_verbose > 2)
+ 		ast_verbose( VERBOSE_PREFIX_3 "Nobody picked up in %d ms\n", rnatime);
+ 	ast_queue_log(qe->parent->name, qe->chan->uniqueid, membername, "RINGNOANSWER", "%d", rnatime);
+@@ -2549,8 +2567,10 @@
+ 					/* else fall through */
+ 				case AST_DEVICE_NOT_INUSE:
+ 				case AST_DEVICE_UNKNOWN:
+-					if (!cur->paused)
++					/* Do not count paused, or "penaltied" members */
++					if (!mem->paused && !(q->notpresentpenalty && ((time(NULL) - mem->lastnoanswer) < q->notpresentpenalty))) {
+ 						avl++;
++					}
+ 					break;
+ 				}
+ 				ao2_ref(cur, -1);
+@@ -3057,6 +3077,7 @@
+ 		tmp->member = cur;
+ 		tmp->oldstatus = cur->status;
+ 		tmp->lastcall = cur->lastcall;
++		tmp->lastnoanswer = cur->lastnoanswer;
+ 		ast_copy_string(tmp->interface, cur->interface, sizeof(tmp->interface));
+ 		/* Special case: If we ring everyone, go ahead and ring them, otherwise
+ 		   just calculate their metric for the appropriate strategy */
+@@ -3601,6 +3622,33 @@
+ 	return res;
+ }
+ 
++static int set_member_last_noanswer(const char *interface) {
++	int found = 0;
++	struct call_queue *q;
++	struct member *mem;
++	struct ao2_iterator queue_iter;
++	
++	if (ast_strlen_zero(interface))
++		return RESULT_FAILURE;
++	
++	queue_iter = ao2_iterator_init(queues, 0);
++	while ((q = ao2_t_iterator_next(&queue_iter, "Iterate through queues"))) {
++		ao2_lock(q);
++		if ((mem = interface_exists(q, interface))) {
++			time(&(mem->lastnoanswer));
++			found++;
++			ao2_ref(mem, -1);
++		}
++		ao2_unlock(q);
++		queue_t_unref(q, "Done with iterator");
++	}
++	ao2_iterator_destroy(&queue_iter);
++	
++	return found ? RESULT_SUCCESS : RESULT_FAILURE;
++ }
++
++
++
+ static int set_member_paused(const char *queuename, const char *interface, int paused)
+ {
+ 	int found = 0;
+@@ -4787,6 +4835,9 @@
+ 				}
+ 				if (mem->penalty)
+ 					ast_build_string(&max, &max_left, " with penalty %d", mem->penalty);
++				if (q->notpresentpenalty &&	mem->lastnoanswer && (time(NULL) - mem->lastnoanswer < q->notpresentpenalty))
++					ast_build_string(&max, &max_left, " (not present: %lds) ", 0 - (q->notpresentpenalty - (time(NULL) - mem->lastnoanswer)));
++
+ 				if (mem->dynamic)
+ 					ast_build_string(&max, &max_left, " (dynamic)");
+ 				if (mem->realtime)

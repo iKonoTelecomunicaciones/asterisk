@@ -1,0 +1,11 @@
+--- main/frame.c	2011-02-09 22:38:41.873780001 +0100
++++ main/frame.c	2011-02-09 22:39:14.823780002 +0100
+@@ -266,7 +266,7 @@
+ 	/* Make sure we have enough data */
+ 	if (s->len < s->size) {
+ 		/* Or, if this is a G.729 frame with VAD on it, send it immediately anyway */
+-		if (!((s->flags & AST_SMOOTHER_FLAG_G729) && (s->size % 10)))
++		if (!((s->flags & AST_SMOOTHER_FLAG_G729) && (s->len % 10)))
+ 			return NULL;
+ 	}
+ 	len = s->size;

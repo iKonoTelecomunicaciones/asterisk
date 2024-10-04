@@ -1,0 +1,64 @@
+--- channels/chan_sip.c	2014-03-20 10:17:33.000000000 -0500
++++ channels/chan_sip.c	2017-10-10 17:26:54.831048633 -0500
+@@ -964,6 +964,7 @@
+ 	struct ast_flags flags[2];		/*!< SIP_ flags */
+ 	int timer_t1;				/*!< SIP timer T1, ms rtt */
+ 	unsigned int sipoptions;		/*!< Supported SIP options on the other end */
++	int silence_supp;			/*!< Show/Hide silenceSupp from header */
+ 	struct ast_codec_pref prefs;		/*!< codec prefs */
+ 	int capability;				/*!< Special capability (codec) */
+ 	int jointcapability;			/*!< Supported capability at both ends (codecs) */
+@@ -1111,6 +1112,7 @@
+ 	char cid_num[80];		/*!< Caller ID num */
+ 	char cid_name[80];		/*!< Caller ID name */
+ 	int callingpres;		/*!< Calling id presentation */
++	int silence_supp;               /*!< Show/Hide silenceSupp from header */
+ 	int inUse;			/*!< Number of calls in use */
+ 	int inRinging;			/*!< Number of calls ringing */
+ 	int onHold;                     /*!< Peer has someone on hold */
+@@ -2830,6 +2832,7 @@
+ 
+ 	ast_copy_flags(&dialog->flags[0], &peer->flags[0], SIP_FLAGS_TO_COPY);
+ 	ast_copy_flags(&dialog->flags[1], &peer->flags[1], SIP_PAGE2_FLAGS_TO_COPY);
++	dialog->silence_supp = peer->silence_supp;
+ 	dialog->capability = peer->capability;
+ 	if ((!ast_test_flag(&dialog->flags[1], SIP_PAGE2_VIDEOSUPPORT) || !(dialog->capability & AST_FORMAT_VIDEO_MASK)) && dialog->vrtp) {
+ 		ast_rtp_destroy(dialog->vrtp);
+@@ -6834,8 +6837,12 @@
+ 		if (option_debug > 2)
+ 			ast_log(LOG_DEBUG, "-- Done with adding codecs to SDP\n");
+ 
+-		if (!p->owner || !ast_internal_timing_enabled(p->owner))
+-			ast_build_string(&a_audio_next, &a_audio_left, "a=silenceSupp:off - - - -\r\n");
++		if (!p->owner || !ast_internal_timing_enabled(p->owner)) {
++			/* Show hide silenceSupp from header */
++			if (p->silence_supp) {
++				ast_build_string(&a_audio_next, &a_audio_left, "a=silenceSupp:off - - - -\r\n");
++			}
++		}
+ 
+ 		if (min_audio_packet_size)
+ 			ast_build_string(&a_audio_next, &a_audio_left, "a=ptime:%d\r\n", min_audio_packet_size);
+@@ -17511,6 +17518,7 @@
+ 	peer->pickupgroup = 0;
+ 	peer->maxms = default_qualify;
+ 	peer->prefs = default_prefs;
++	peer->silence_supp = TRUE;
+ }
+ 
+ /*! \brief Create temporary peer (used in autocreatepeer mode) */
+@@ -17789,6 +17797,14 @@
+ 				ast_log(LOG_WARNING, "Qualify is incompatible with dynamic uncached realtime.  Please either turn rtcachefriends on or turn qualify off on peer '%s'\n", peer->name);
+ 				peer->maxms = 0;
+ 			}
++		} else if (!strcasecmp(v->name, "silencesupp")) {
++			if (!strcasecmp(v->value, "hide")) {
++				peer->silence_supp = FALSE;
++			} else if (!strcasecmp(v->value, "show")) {
++				peer->silence_supp = TRUE;
++			} else {
++				ast_log(LOG_WARNING, "silencesupp bad param on %s just use: 'show' or 'hide'\n", peer->name);
++			}
+ 		} else if (!strcasecmp(v->name, "maxcallbitrate")) {
+ 			peer->maxcallbitrate = atoi(v->value);
+ 			if (peer->maxcallbitrate < 0)

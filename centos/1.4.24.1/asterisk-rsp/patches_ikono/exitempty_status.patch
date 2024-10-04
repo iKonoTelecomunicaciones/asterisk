@@ -1,0 +1,54 @@
+--- apps/app_queue.c	2011-02-07 11:54:21.000000000 -0500
++++ apps/app_queue.c	2011-02-07 12:14:29.000000000 -0500
+@@ -2666,7 +2666,7 @@
+ 		/* leave the queue if no agents, if enabled */
+ 		if (qe->parent->leavewhenempty && (stat == QUEUE_NO_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEEMPTY;
+-			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld", qe->pos, qe->opos, (long)time(NULL) - qe->start);
++			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEEMPTY");
+ 			leave_queue(qe);
+ 			break;
+ 		}
+@@ -2674,7 +2674,7 @@
+ 		/* leave the queue if no reachable agents, if enabled */
+ 		if ((qe->parent->leavewhenempty == QUEUE_EMPTY_STRICT) && (stat == QUEUE_NO_REACHABLE_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEUNAVAIL;
+-			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld", qe->pos, qe->opos, (long)time(NULL) - qe->start);
++			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEUNAVAIL");
+ 			leave_queue(qe);
+ 			break;
+ 		}
+@@ -4314,7 +4314,7 @@
+ 			if (qe.parent->leavewhenempty && (stat == QUEUE_NO_MEMBERS)) {
+ 				record_abandoned(&qe);
+ 				reason = QUEUE_LEAVEEMPTY;
+-				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld", qe.pos, qe.opos, (long)(time(NULL) - qe.start));
++				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe.pos, qe.opos, (long)(time(NULL) - qe.start), "LEAVEEMPTY");
+ 				res = 0;
+ 				break;
+ 			}
+@@ -4323,7 +4323,7 @@
+ 			if ((qe.parent->leavewhenempty == QUEUE_EMPTY_STRICT) && (stat == QUEUE_NO_REACHABLE_MEMBERS)) {
+ 				record_abandoned(&qe);
+ 				reason = QUEUE_LEAVEUNAVAIL;
+-				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld", qe.pos, qe.opos, (long)(time(NULL) - qe.start));
++				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe.pos, qe.opos, (long)(time(NULL) - qe.start), "LEAVEUNAVAIL");
+ 				res = 0;
+ 				break;
+ 			}
+@@ -4394,6 +4394,15 @@
+ 			ast_queue_log(args.queuename, chan->uniqueid, "NONE", "FULL", "%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),
+ 				S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), S_OR(subcampaign, ""), count_enties, membercount);
+         }
++		if ((reason == QUEUE_JOINEMPTY) || (reason == QUEUE_JOINUNAVAIL)){
++			char *campaign, *subcampaign;
++			campaign = (char*)pbx_builtin_getvar_helper(chan, "CAMPAIGN");
++			subcampaign = (char*)pbx_builtin_getvar_helper(chan, "SUBCAMPAIGN");
++			ast_queue_log(args.queuename, chan->uniqueid, "NONE", (reason == QUEUE_JOINEMPTY) ? "JOINEMPTY" : "JOINUNAVAIL", 
++				"%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),	S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), 
++				S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), 
++				S_OR(subcampaign, ""), count_enties, membercount);
++        }
+ 		ast_log(LOG_WARNING, "Unable to join queue '%s'\n", args.queuename);
+ 		set_queue_result(chan, reason);
+ 		res = 0;

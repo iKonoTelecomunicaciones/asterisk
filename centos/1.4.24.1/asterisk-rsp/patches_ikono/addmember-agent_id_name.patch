@@ -1,0 +1,62 @@
+--- apps/app_queue.c	2011-02-18 17:55:32.000000000 -0500
++++ apps/app_queue.c	2011-02-18 18:00:50.000000000 -0500
+@@ -4045,9 +4045,13 @@
+ 			priority_jump = 1;
+ 	}
+ 
++	char *agentid, *agentname;
++
+ 	switch (add_to_queue(args.queuename, args.interface, args.membername, penalty, 0, queue_persistent_members, args.state_interface)) {
+ 	case RES_OKAY:
+-		ast_queue_log(args.queuename, chan->uniqueid, args.interface, "ADDMEMBER", "%s", args.membername ? args.membername : args.interface);
++		agentid = (char *)pbx_builtin_getvar_helper(chan, "AGENTID");
++		agentname = (char *)pbx_builtin_getvar_helper(chan, "AGENTNAME");
++		ast_queue_log(args.queuename, chan->uniqueid, args.interface, "ADDMEMBER", "%s|%s|%s", args.membername ? args.membername : args.interface, S_OR(agentid, ""), S_OR(agentname, ""));
+ 		ast_log(LOG_NOTICE, "Added interface '%s' to queue '%s'\n", args.interface, args.queuename);
+ 		pbx_builtin_setvar_helper(chan, "AQMSTATUS", "ADDED");
+ 		res = 0;
+@@ -5092,7 +5096,7 @@
+ 
+ static int manager_add_queue_member(struct mansession *s, const struct message *m)
+ {
+-	const char *queuename, *interface, *penalty_s, *paused_s, *membername, *state_interface;
++	const char *queuename, *interface, *penalty_s, *paused_s, *membername, *state_interface, *agentid, *agentname;
+ 	int paused, penalty = 0;
+ 
+ 	queuename = astman_get_header(m, "Queue");
+@@ -5101,6 +5105,8 @@
+ 	paused_s = astman_get_header(m, "Paused");
+ 	membername = astman_get_header(m, "MemberName");
+ 	state_interface = astman_get_header(m, "StateInterface");
++	agentid = astman_get_header(m, "Agentid");
++	agentname = astman_get_header(m, "AgentName");
+ 
+ 	if (ast_strlen_zero(queuename)) {
+ 		astman_send_error(s, m, "'Queue' not specified.");
+@@ -5124,7 +5130,7 @@
+ 
+ 	switch (add_to_queue(queuename, interface, membername, penalty, paused, queue_persistent_members, state_interface)) {
+ 	case RES_OKAY:
+-		ast_queue_log(queuename, "MANAGER", interface, "ADDMEMBER", "%s", membername ? membername : interface);
++		ast_queue_log(queuename, "MANAGER", interface, "ADDMEMBER", "%s|%s|%s", membername ? membername : interface, agentid, agentname);
+ 		astman_send_ack(s, m, "Added interface to queue");
+ 		break;
+ 	case RES_EXISTS:
+@@ -5225,7 +5231,7 @@
+ 	char *queuename, *interface, *membername = NULL, *state_interface = NULL;
+ 	int penalty;
+ 
+-	if ((argc != 6) && (argc != 8) && (argc != 10)) {
++	if ((argc != 6) && (argc != 8) && (argc != 10) && (argc != 12) && (argc != 13) && (argc != 14)) {
+ 		return RESULT_SHOWUSAGE;
+ 	} else if (strcmp(argv[4], "to")) {
+ 		return RESULT_SHOWUSAGE;
+@@ -5261,7 +5267,7 @@
+ 
+ 	switch (add_to_queue(queuename, interface, membername, penalty, 0, queue_persistent_members, state_interface)) {
+ 	case RES_OKAY:
+-		ast_queue_log(queuename, "CLI", interface, "ADDMEMBER", "%s", membername ? membername : interface);
++		ast_queue_log(queuename, "CLI", interface, "ADDMEMBER", "%s|%s|%s", membername ? membername : interface, argc >= 13 ? argv[12] : "", argc >= 14 ? argv[13] : "");
+ 		ast_cli(fd, "Added interface '%s' to queue '%s'\n", interface, queuename);
+ 		return RESULT_SUCCESS;
+ 	case RES_EXISTS:

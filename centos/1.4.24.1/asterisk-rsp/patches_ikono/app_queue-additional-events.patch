@@ -1,0 +1,152 @@
+--- apps/app_queue.c	2013-11-27 13:14:17.000000000 -0500
++++ apps/app_queue.c	2013-11-27 09:55:37.000000000 -0500
+@@ -575,7 +575,7 @@ static char *int2result(enum queue_resul
+ 	for (i = 0; i < sizeof(queue_results) / sizeof(queue_results[0]); i++)
+ 		if (queue_results[i].id == res)
+ 			return queue_results[i].text;
+-        return "UNKNOWN";
++	return "UNKNOWN";
+ }
+ 
+ static char *int2strat(int strategy)
+@@ -1844,8 +1844,8 @@ static void leave_queue(struct queue_ent
+ 
+ 			/* Take us out of the queue */
+ 			manager_event(EVENT_FLAG_CALL, "Leave",
+-				"Channel: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\n",
+-				qe->chan->name, q->name,  q->count, qe->chan->uniqueid, reason);
++				"Channel: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\nHoldTime: %d\r\n",
++				qe->chan->name, q->name,  q->count, qe->chan->uniqueid, reason, (int)(time(NULL) - qe->start));
+ 			if (option_debug)
+ 				ast_log(LOG_DEBUG, "Queue '%s' Leave, Channel '%s'\n", q->name, qe->chan->name );
+ 			/* Take us out of the queue */
+@@ -2084,6 +2084,7 @@ static int ring_entry(struct queue_ent *
+ 		manager_event(EVENT_FLAG_AGENT, "AgentCalled",
+ 					"AgentCalled: %s\r\n"
+ 					"AgentName: %s\r\n"
++					"ChannelUniqueID: %s\r\n"
+ 					"ChannelCalling: %s\r\n"
+ 					"CallerID: %s\r\n"
+ 					"CallerIDName: %s\r\n"
+@@ -2091,7 +2092,7 @@ static int ring_entry(struct queue_ent *
+ 					"Extension: %s\r\n"
+ 					"Priority: %d\r\n"
+ 					"%s",
+-					tmp->interface, tmp->member->membername, qe->chan->name,
++					tmp->interface, tmp->member->membername, qe->chan->uniqueid, qe->chan->name,
+ 					tmp->chan->cid.cid_num ? tmp->chan->cid.cid_num : "unknown",
+ 					tmp->chan->cid.cid_name ? tmp->chan->cid.cid_name : "unknown",
+ 					qe->chan->context, qe->chan->exten, qe->chan->priority,
+@@ -2287,6 +2288,7 @@ static void rna(int rnatime, struct queu
+ 			"Member: %s\r\n"
+ 			"MemberName: %s\r\n"
+ 			"Ringtime: %d\r\n"
++			"Reason: %d\r\n"
+ 			"%s",
+ 			qe->parent->name,
+ 			qe->chan->uniqueid,
+@@ -2294,6 +2296,7 @@ static void rna(int rnatime, struct queu
+ 			interface,
+ 			membername,
+ 			rnatime,
++			reason,
+ 			qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
+ 	}
+ 	  
+@@ -2888,6 +2891,24 @@ static void queue_transfer_fixup(void *d
+ 	time_t callstart = qtds->starttime;
+ 	int callcompletedinsl = qtds->callcompletedinsl;
+ 	struct ast_datastore *datastore;
++	char vars[2048];
++
++	if (qe->parent->eventwhencalled)
++		manager_event(EVENT_FLAG_AGENT, "AgentComplete",
++				"Queue: %s\r\n"
++				"Uniqueid: %s\r\n"
++				"Channel: %s\r\n"
++				"Member: %s\r\n"
++				"MemberName: %s\r\n"
++				"HoldTime: %ld\r\n"
++				"TalkTime: %ld\r\n"
++				"Extension: %s\r\n"
++				"Context: %s\r\n"
++				"Reason: transfer\r\n"
++				"%s",
++				qe->parent->name, qe->chan->uniqueid, qe->chan->name, member->interface, member->membername,
++				(long)(callstart - qe->start), (long)(time(NULL) - callstart), new_chan->exten, new_chan->context,
++				qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
+ 
+ 	ast_queue_log(qe->parent->name, qe->chan->uniqueid, member->membername, "TRANSFER", "%s|%s|%ld|%ld|%d|%d",
+ 				new_chan->exten, new_chan->context, (long) (callstart - qe->start),
+@@ -3429,10 +3450,13 @@ static int try_calling(struct queue_ent
+ 					"Member: %s\r\n"
+ 					"MemberName: %s\r\n"
+ 					"Holdtime: %ld\r\n"
++					"CallerID: %s\r\n"
++					"CallerIDName: %s\r\n"
+ 					"BridgedChannel: %s\r\n"
++					"BridgedChannelName: %s\r\n"
+ 					"%s",
+ 					queuename, qe->chan->uniqueid, peer->name, member->interface, member->membername,
+-					(long)time(NULL) - qe->start, peer->uniqueid,
++					(long)time(NULL) - qe->start, S_OR(qe->chan->cid.cid_num, "unknown"), S_OR(qe->chan->cid.cid_name, "unknown"), peer->uniqueid, qe->chan->name,
+ 					qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
+ 		ast_copy_string(oldcontext, qe->chan->context, sizeof(oldcontext));
+ 		ast_copy_string(oldexten, qe->chan->exten, sizeof(oldexten));
+@@ -3465,6 +3489,22 @@ static int try_calling(struct queue_ent
+ 				ast_queue_log(queuename, qe->chan->uniqueid, member->membername, "TRANSFER", "%s|%s|%ld|%ld|%d|%d",
+ 					qe->chan->exten, qe->chan->context, (long) (callstart - qe->start),
+ 					(long) (time(NULL) - callstart), qe->opos, qe->pos);
++				if (qe->parent->eventwhencalled)
++					manager_event(EVENT_FLAG_AGENT, "AgentComplete",
++							"Queue: %s\r\n"
++							"Uniqueid: %s\r\n"
++							"Channel: %s\r\n"
++							"Member: %s\r\n"
++							"MemberName: %s\r\n"
++							"HoldTime: %ld\r\n"
++							"TalkTime: %ld\r\n"
++							"Extension: %s\r\n"
++							"Context: %s\r\n"
++							"Reason: transfer\r\n"
++							"%s",
++							queuename, qe->chan->uniqueid, peer->name, member->interface, member->membername,
++							(long)(callstart - qe->start), (long)(time(NULL) - callstart), qe->chan->exten, qe->chan->context,
++							qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
+ 			} else if (qe->chan->_softhangup) {
+ 				ast_queue_log(queuename, qe->chan->uniqueid, member->membername, "COMPLETECALLER", "%ld|%ld|%d|%d",
+ 					(long) (callstart - qe->start), (long) (time(NULL) - callstart), qe->opos, qe->pos);
+@@ -4390,6 +4430,7 @@ stop:
+ 				}
+ 				res = -1;
+ 			} else if (qe.valid_digits) {
++				record_abandoned(&qe, "EXITWITHKEY");
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHKEY",
+ 					"%s|%d|%d", qe.digits, qe.pos, qe.opos);
+ 			}
+@@ -4415,6 +4456,12 @@ stop:
+ 			subcampaign = (char*)pbx_builtin_getvar_helper(chan, "SUBCAMPAIGN");
+ 			ast_queue_log(args.queuename, chan->uniqueid, "NONE", "FULL", "%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),
+ 				S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), S_OR(subcampaign, ""), count_enties, membercount);
++		        manager_event(EVENT_FLAG_CALL, "JoinFail",
++		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: FULL\r\n",
++		        	chan->name,
++		        	S_OR(chan->cid.cid_num, "unknown"), /* XXX somewhere else it is <unknown> */
++		        	S_OR(chan->cid.cid_name, "unknown"),
++		        	args.queuename, count_enties, chan->uniqueid);
+         }
+ 		if ((reason == QUEUE_JOINEMPTY) || (reason == QUEUE_JOINUNAVAIL)){
+ 			char *campaign, *subcampaign;
+@@ -4424,6 +4471,12 @@ stop:
+ 				"%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),	S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), 
+ 				S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), 
+ 				S_OR(subcampaign, ""), count_enties, membercount);
++		        manager_event(EVENT_FLAG_CALL, "JoinFail",
++		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\n",
++		        	chan->name,
++		        	S_OR(chan->cid.cid_num, "unknown"), /* XXX somewhere else it is <unknown> */
++		        	S_OR(chan->cid.cid_name, "unknown"),
++		        	args.queuename, count_enties, chan->uniqueid, (reason == QUEUE_JOINEMPTY) ? "JOINEMPTY" : "JOINUNAVAIL");
+         }
+ 		ast_log(LOG_WARNING, "Unable to join queue '%s'\n", args.queuename);
+ 		set_queue_result(chan, reason);

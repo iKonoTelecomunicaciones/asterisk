@@ -1,0 +1,16 @@
+--- contrib/init.d/rc.debian.asterisk	2008-05-30 18:44:39.499532000 +0200
++++ contrib/init.d/rc.debian.asterisk	2011-02-28 13:14:19.629615771 +0100
+@@ -87,9 +87,12 @@
+ 	$0 start
+ 	# "restart|force-reload" starts Asterisk and returns 0 even if Asterisk was stopped (as LSB expects).
+ 	;;
++  status)
++       status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
++       ;;
+   *)
+ 	N=/etc/init.d/$NAME
+-	echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
++	echo "Usage: $N {start|stop|restart|reload|force-reload|status}" >&2
+ 	exit 1
+ 	;;
+ esac

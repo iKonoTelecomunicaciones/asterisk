@@ -1,0 +1,70 @@
+--- apps/app_queue.c	2011-02-04 17:10:09.000000000 -0500
++++ app_queue.c	2011-02-04 15:15:58.000000000 -0500
+@@ -1571,7 +1571,7 @@
+ 	return q;
+ }
+ 
+-static int join_queue(char *queuename, struct queue_ent *qe, enum queue_result *reason)
++static int join_queue(char *queuename, struct queue_ent *qe, enum queue_result *reason, int *count_enties, int *membercount)
+ {
+ 	struct call_queue *q;
+ 	struct queue_ent *cur, *prev = NULL;
+@@ -1585,6 +1585,8 @@
+ 
+ 	AST_LIST_LOCK(&queues);
+ 	ao2_lock(q);
++    *count_enties = q->count;
++    *membercount = q->membercount;
+ 
+ 	/* This is our one */
+ 	stat = get_member_status(q, qe->max_penalty);
+@@ -1594,7 +1596,7 @@
+ 		*reason = QUEUE_JOINUNAVAIL;
+ 	else if (q->maxlen && (q->count >= q->maxlen))
+ 		*reason = QUEUE_FULL;
+-	else {
++    else {
+ 		/* There's space for us, put us at the right position inside
+ 		 * the queue.
+ 		 * Take into account the priority of the calling user */
+@@ -4145,6 +4147,8 @@
+ 	);
+ 	/* Our queue entry */
+ 	struct queue_ent qe = { 0 };
++    int count_enties = -1;
++    int membercount = -1;
+ 	
+ 	if (ast_strlen_zero(data)) {
+ 		ast_log(LOG_WARNING, "Queue requires an argument: queuename[|options[|URL[|announceoverride[|timeout[|agi]]]]]\n");
+@@ -4219,11 +4223,14 @@
+ 	qe.last_periodic_announce_time = time(NULL);
+ 	qe.last_periodic_announce_sound = 0;
+ 	qe.valid_digits = 0;
+-	if (!join_queue(args.queuename, &qe, &reason)) {
++	if (!join_queue(args.queuename, &qe, &reason, &count_enties, &membercount)) {
+ 		int makeannouncement = 0;
++        char *campaign, *subcampaign;
++        campaign = (char*)pbx_builtin_getvar_helper(chan, "CAMPAIGN");
++        subcampaign = (char*)pbx_builtin_getvar_helper(chan, "SUBCAMPAIGN");
+ 
+-		ast_queue_log(args.queuename, chan->uniqueid, "NONE", "ENTERQUEUE", "%s|%s", S_OR(args.url, ""),
+-			S_OR(chan->cid.cid_num, ""));
++		ast_queue_log(args.queuename, chan->uniqueid, "NONE", "ENTERQUEUE", "%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),
++			S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), S_OR(subcampaign, ""), count_enties, membercount);
+ check_turns:
+ 		if (ringing) {
+ 			ast_indicate(chan, AST_CONTROL_RINGING);
+@@ -4378,6 +4385,13 @@
+ 		if (reason != QUEUE_UNKNOWN)
+ 			set_queue_result(chan, reason);
+ 	} else {
++		if (reason == QUEUE_FULL){
++			char *campaign, *subcampaign;
++			campaign = (char*)pbx_builtin_getvar_helper(chan, "CAMPAIGN");
++			subcampaign = (char*)pbx_builtin_getvar_helper(chan, "SUBCAMPAIGN");
++			ast_queue_log(args.queuename, chan->uniqueid, "NONE", "FULL", "%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),
++				S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), S_OR(subcampaign, ""), count_enties, membercount);
++        }
+ 		ast_log(LOG_WARNING, "Unable to join queue '%s'\n", args.queuename);
+ 		set_queue_result(chan, reason);
+ 		res = 0;

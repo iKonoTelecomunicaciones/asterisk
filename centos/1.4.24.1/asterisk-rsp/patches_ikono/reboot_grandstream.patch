@@ -1,0 +1,179 @@
+--- channels/chan_sip.c	2010-12-10 17:16:50.000000000 -0500
++++ channels/chan_sip.c	2010-12-13 12:21:10.000000000 -0500
+@@ -138,6 +138,7 @@
+ #include "asterisk/astdb.h"
+ #include "asterisk/causes.h"
+ #include "asterisk/utils.h"
++#include "asterisk/md5.h"
+ #include "asterisk/file.h"
+ #include "asterisk/astobj.h"
+ #include "asterisk/devicestate.h"
+@@ -1095,6 +1096,7 @@
+ 					/*!< peer->name is the unique name of this object */
+ 	char secret[80];		/*!< Password */
+ 	char md5secret[80];		/*!< Password in MD5 */
++	char mac[13];/*!< MAC address of SIP phone */
+ 	struct sip_auth *auth;		/*!< Realm authentication list */
+ 	char context[AST_MAX_CONTEXT];	/*!< Default context for incoming calls */
+ 	char subscribecontext[AST_MAX_CONTEXT];	/*!< Default context for subscriptions */
+@@ -1518,6 +1520,7 @@
+ static void build_via(struct sip_pvt *p);
+ static int create_addr_from_peer(struct sip_pvt *r, struct sip_peer *peer);
+ static int create_addr(struct sip_pvt *dialog, const char *opeer, struct sockaddr_in *sin);
++static int grandstream_reset_packet(int fd, struct sip_request *req, const char *opeer);
+ static char *generate_random_string(char *buf, size_t size);
+ static void build_callid_pvt(struct sip_pvt *pvt);
+ static void build_callid_registry(struct sip_registry *reg, struct in_addr ourip, const char *fromdomain);
+@@ -1525,6 +1528,7 @@
+ static int add_header(struct sip_request *req, const char *var, const char *value);
+ static int add_header_contentLength(struct sip_request *req, int len);
+ static int add_line(struct sip_request *req, const char *line);
++static int add_line_binary(struct sip_request *req, const char *line, int len);
+ static int add_text(struct sip_request *req, const char *text);
+ static int add_digit(struct sip_request *req, char digit, unsigned int duration);
+ static int add_vidupdate(struct sip_request *req);
+@@ -2997,6 +3001,61 @@
+ 	return 0;
+ }
+ 
++static int grandstream_reset_packet(int fd, struct sip_request *req, const char *opeer)
++{
++	struct MD5Context c;
++	union {
++		char digest[24];
++		int digest2[24 / sizeof(unsigned int) * sizeof(char)];
++	} d;
++	char mac[6];
++	char *colon = ":";
++	char buf[3];
++	int i, len;
++
++	struct sip_peer *p;
++
++	p = find_peer(opeer, NULL, 1, 0);
++
++	if (!strlen(p->secret)) 
++	{
++		ast_cli(fd, "Need secret to reset peer %s (Grandstream phone)\n", opeer);
++		return -1;
++	}
++
++	if (!p || !strlen(p->mac)) 
++	{
++		ast_cli(fd, "No peer %s or no MAC address for Grandstream phone\n", opeer);
++		return -1;
++	}
++
++	len = strlen((char *)p->mac);
++	for(i = 0; i * 2 < len && i < 6; i++)
++	{
++		buf[0] = p->mac[2*i];
++		buf[1] = p->mac[2*i+1];
++		buf[2] = 0;
++		mac[i] = (unsigned char) strtoq(buf, NULL, 16);
++	}
++
++	d.digest2[0] = htonl(0x00010000);
++	d.digest2[1] = htonl(time(NULL));
++
++	MD5Init(&c);
++	MD5Update(&c, (unsigned char *)mac, 6);
++	MD5Update(&c, (unsigned char *)colon, 1);
++	MD5Update(&c, (unsigned char *)p->secret, strlen((char *)p->secret));
++	MD5Update(&c, (unsigned char *)colon, 1);
++	MD5Update(&c, (unsigned char *)d.digest+4, 4);
++	MD5Final((unsigned char *)d.digest+8, &c);
++
++	add_header(req, "Content-Type", "application/octet-stream");
++	add_header_contentLength(req, 24);
++	add_line_binary(req, d.digest, 24);
++
++	return 0;
++}
++
+ /*! \brief Scheduled congestion on a call */
+ static int auto_congest(const void *nothing)
+ {
+@@ -5796,6 +5855,29 @@
+ 	return 0;	
+ }
+ 
++/*! \brief Add binary content (not header) to SIP message */
++static int add_line_binary(struct sip_request *req, const char *line, int len)
++{
++	if (req->lines == SIP_MAX_LINES)  {
++		ast_log(LOG_WARNING, "Out of SIP line space\n");
++		return -1;
++	}
++	if (!req->lines) {
++		/* Add extra empty return */
++		snprintf(req->data + req->len, sizeof(req->data) - req->len, "\r\n");
++		req->len += strlen(req->data + req->len);
++	}
++	if (req->len + len >= sizeof(req->data) - 4) {
++		ast_log(LOG_WARNING, "Out of space, can't add anymore\n");
++		return -1;
++	}
++	req->line[req->lines] = req->data + req->len;
++	memcpy(req->line[req->lines], line, len);
++	req->len += len;
++	req->lines++;
++	return 0;
++}
++
+ /*! \brief Copy one header field from one request to another */
+ static int copy_header(struct sip_request *req, const struct sip_request *orig, const char *field)
+ {
+@@ -11747,6 +11829,14 @@
+ 			p->ourip = __ourip;
+ 		build_via(p);
+ 		build_callid_pvt(p);
++		if (!strcmp(argv[2], "reboot-grandstream")) {
++			ast_cli(fd, "REBOOTING type '%s' to '%s'\n", argv[2], argv[i]);
++			if (grandstream_reset_packet(fd, &req, argv[i])) {
++				sip_destroy(p);
++				ast_cli(fd, "Could not create address for '%s'\n", argv[i]);
++				continue;
++			}
++		}
+ 		ast_cli(fd, "Sending NOTIFY of type '%s' to '%s'\n", argv[2], argv[i]);
+ 		transmit_sip_request(p, &req);
+ 		sip_scheddestroy(p, DEFAULT_TRANS_TIMEOUT);
+@@ -17527,6 +17617,8 @@
+ 			ast_copy_string(peer->secret, v->value, sizeof(peer->secret));
+ 		else if (!strcasecmp(v->name, "md5secret")) 
+ 			ast_copy_string(peer->md5secret, v->value, sizeof(peer->md5secret));
++		else if (!strcasecmp(v->name, "mac"))
++			ast_copy_string(peer->mac, v->value, sizeof(peer->mac)); 
+ 		else if (!strcasecmp(v->name, "auth"))
+ 			peer->auth = add_realm_authentication(peer->auth, v->value, v->lineno);
+ 		else if (!strcasecmp(v->name, "callerid")) {
+--- configs/sip.conf.sample	2009-04-02 12:20:22.000000000 -0500
++++ configs/sip.conf.sample	2010-12-13 12:23:17.000000000 -0500
+@@ -530,6 +530,7 @@
+ ;                             rtpholdtimeout
+ ;                             sendrpid
+ ;                             outboundproxy
++;                             mac
+ ;                             rfc2833compensate
+ ;                             t38pt_usertpsource
+ ;                             contactpermit         ; Limit what a host may register as (a neat trick
+@@ -586,6 +587,7 @@
+ ;nat=no                         ; there is not NAT between phone and Asterisk
+ ;canreinvite=yes                ; allow RTP voice traffic to bypass Asterisk
+ ;dtmfmode=info                  ; either RFC2833 or INFO for the BudgeTone
++;mac=000b8203f9fe                 ; MAC address of Grandstream phone to reboot it
+ ;call-limit=1                   ; permit only 1 outgoing call and 1 incoming call at a time
+                                 ; from the phone to asterisk
+                                 ; 1 for the explicit peer, 1 for the explicit user,
+--- configs/sip_notify.conf.sample	2007-03-19 10:42:26.000000000 -0500
++++ configs/sip_notify.conf.sample	2010-12-13 12:22:18.000000000 -0500
+@@ -8,7 +8,7 @@
+ Content-Length=>0
+ 
+ ; Untested
+-[grandstream-check-cfg]
++[reboot-grandstream]
+ Event=>sys-control
+ 
+ ; Untested

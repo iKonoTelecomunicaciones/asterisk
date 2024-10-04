@@ -1,0 +1,80 @@
+--- apps/app_queue.c	2013-11-27 18:34:20.000000000 -0500
++++ apps/app_queue.c	2014-02-27 09:58:49.000000000 -0500
+@@ -478,6 +478,8 @@
+ static char *int2strat(int strategy);
+ static char *int2result(enum queue_result res);
+ 
++static char *vars2manager(struct ast_channel *chan, char *vars, size_t len);
++
+ static inline struct call_queue *queue_ref(struct call_queue *q)
+ {
+ 	ao2_ref(q, 1);
+@@ -1594,6 +1596,7 @@
+ 	int pos = 0;
+ 	int inserted = 0;
+ 	enum queue_member_status stat;
++	char vars[2048];
+ 
+ 	if (!(q = load_realtime_queue(queuename)))
+ 		return res;
+@@ -1639,11 +1642,12 @@
+ 		q->count++;
+ 		res = 0;
+ 		manager_event(EVENT_FLAG_CALL, "Join",
+-			"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nPosition: %d\r\nCount: %d\r\nUniqueid: %s\r\n",
++			"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nPosition: %d\r\nCount: %d\r\nUniqueid: %s\r\n%s",
+ 			qe->chan->name,
+ 			S_OR(qe->chan->cid.cid_num, "unknown"), /* XXX somewhere else it is <unknown> */
+ 			S_OR(qe->chan->cid.cid_name, "unknown"),
+-			q->name, qe->pos, q->count, qe->chan->uniqueid );
++			q->name, qe->pos, q->count, qe->chan->uniqueid,
++			qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
+ 		if (option_debug)
+ 			ast_log(LOG_DEBUG, "Queue '%s' Join, Channel '%s', Position '%d'\n", q->name, qe->chan->name, qe->pos );
+ 	}
+@@ -2688,7 +2692,7 @@
+ 		if (qe->parent->leavewhenempty && (stat == QUEUE_NO_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEEMPTY;
+ 			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEEMPTY");
+-			leave_queue(qe, "EXITEMPTY");
++			leave_queue(qe, "LEAVEEMPTY");
+ 			break;
+ 		}
+ 
+@@ -2696,7 +2700,7 @@
+ 		if ((qe->parent->leavewhenempty == QUEUE_EMPTY_STRICT) && (stat == QUEUE_NO_REACHABLE_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEUNAVAIL;
+ 			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEUNAVAIL");
+-			leave_queue(qe, "EXITEMPTY");
++			leave_queue(qe, "LEAVEUNAVAIL");
+ 			break;
+ 		}
+ 
+@@ -4457,10 +4461,12 @@
+ 			ast_queue_log(args.queuename, chan->uniqueid, "NONE", "FULL", "%s|%s|%s|%s|%s|%s|%s|%s|%d|%d", S_OR(args.url, ""),
+ 				S_OR(chan->cid.cid_num, ""), S_OR(chan->cid.cid_name, ""), S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), S_OR(subcampaign, ""), count_enties, membercount);
+ 		        manager_event(EVENT_FLAG_CALL, "JoinFail",
+-		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: FULL\r\n",
++		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nCampaign: %s\r\nSubcampaign: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: FULL\r\n",
+ 		        	chan->name,
+ 		        	S_OR(chan->cid.cid_num, "unknown"), /* XXX somewhere else it is <unknown> */
+ 		        	S_OR(chan->cid.cid_name, "unknown"),
++		        	S_OR(campaign, ""),
++		        	S_OR(subcampaign, ""),
+ 		        	args.queuename, count_enties, chan->uniqueid);
+         }
+ 		if ((reason == QUEUE_JOINEMPTY) || (reason == QUEUE_JOINUNAVAIL)){
+@@ -4472,10 +4478,12 @@
+ 				S_OR(chan->cid.cid_dnid, ""), S_OR(chan->cid.cid_rdnis, ""), S_OR(chan->cid.cid_ani, ""), S_OR(campaign, ""), 
+ 				S_OR(subcampaign, ""), count_enties, membercount);
+ 		        manager_event(EVENT_FLAG_CALL, "JoinFail",
+-		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\n",
++		        	"Channel: %s\r\nCallerID: %s\r\nCallerIDName: %s\r\nCampaign: %s\r\nSubcampaign: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\n",
+ 		        	chan->name,
+ 		        	S_OR(chan->cid.cid_num, "unknown"), /* XXX somewhere else it is <unknown> */
+ 		        	S_OR(chan->cid.cid_name, "unknown"),
++		        	S_OR(campaign, ""),
++		        	S_OR(subcampaign, ""),
+ 		        	args.queuename, count_enties, chan->uniqueid, (reason == QUEUE_JOINEMPTY) ? "JOINEMPTY" : "JOINUNAVAIL");
+         }
+ 		ast_log(LOG_WARNING, "Unable to join queue '%s'\n", args.queuename);

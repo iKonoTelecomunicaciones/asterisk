@@ -1,0 +1,37 @@
+--- apps/app_queue.c	2011-02-07 10:48:31.000000000 -0500
++++ apps/app_queue.c	2011-02-07 10:54:16.000000000 -0500
+@@ -654,10 +654,12 @@
+ 	struct member *member;
+ 	struct ao2_iterator mem_iter;
+ 	enum queue_member_status result = QUEUE_NO_MEMBERS;
++	static int allpaused = 1, empty = 1;
+ 
+ 	ao2_lock(q);
+ 	mem_iter = ao2_iterator_init(q->members, 0);
+ 	while ((member = ao2_iterator_next(&mem_iter))) {
++		empty = 0;
+ 		if (max_penalty && (member->penalty > max_penalty)) {
+ 			ao2_ref(member, -1);
+ 			continue;
+@@ -667,6 +669,9 @@
+ 			ao2_ref(member, -1);
+ 			continue;
+ 		}
++		else {
++			allpaused = 0;
++		}
+ 
+ 		switch (member->status) {
+ 		case AST_DEVICE_INVALID:
+@@ -684,6 +689,11 @@
+ 		}
+ 	}
+ 	ao2_unlock(q);
++
++    if (!empty && allpaused) {
++		result = QUEUE_NORMAL;
++    }
++
+ 	return result;
+ }
+ 

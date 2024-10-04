@@ -1,0 +1,20 @@
+--- Makefile	2010-09-06 16:27:52.000000000 -0500
++++ Makefile	2010-09-06 16:43:33.000000000 -0500
+@@ -258,7 +258,7 @@
+ 
+ ASTCFLAGS+=$(MALLOC_DEBUG)$(BUSYDETECT)$(OPTIONS)
+ 
+-MOD_SUBDIRS:=res channels pbx apps codecs formats cdr funcs main
++MOD_SUBDIRS:=res channels pbx apps codecs formats cdr funcs main lcdial
+ OTHER_SUBDIRS:=utils agi
+ SUBDIRS:=$(OTHER_SUBDIRS) $(MOD_SUBDIRS)
+ SUBDIRS_INSTALL:=$(SUBDIRS:%=%-install)
+
+--- configs/modules.conf.sample	2008-01-10 11:19:47.000000000 -0500
++++ configs/modules.conf.sample	2010-09-07 18:00:32.000000000 -0500
+@@ -33,3 +33,5 @@
+ ;
+ noload => chan_alsa.so
+ ;noload => chan_oss.so
++
++load => app_lcdial.so

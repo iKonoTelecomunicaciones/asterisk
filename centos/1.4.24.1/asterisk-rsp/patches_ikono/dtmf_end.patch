@@ -1,0 +1,10 @@
+--- main/rtp.c	2012-04-11 16:17:04.198561921 -0500
++++ main/rtp.c	2012-04-11 16:21:37.290477839 -0500
+@@ -1343,6 +1343,7 @@
+ 
+ 	/* Record received timestamp as last received now */
+ 	rtp->lastrxts = timestamp;
++	rtp->dtmf_timeout = timestamp + rtp->dtmf_duration + dtmftimeout;
+ 
+ 	rtp->f.mallocd = 0;
+ 	rtp->f.datalen = res - hdrlen;

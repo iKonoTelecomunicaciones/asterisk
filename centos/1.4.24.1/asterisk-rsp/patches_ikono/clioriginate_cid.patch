@@ -1,0 +1,56 @@
+--- res/res_clioriginate.c	2008-02-05 10:09:29.000000000 -0500
++++ res/res_clioriginate.c	2011-02-11 10:18:17.000000000 -0500
+@@ -69,7 +69,7 @@
+ 	orig_help, complete_orig },
+ };
+ 
+-static int orig_app(int fd, const char *chan, const char *app, const char *appdata)
++static int orig_app(int fd, const char *chan, const char *app, const char *appdata, const char *cid_num, const char *cid_name)
+ {
+ 	char *chantech;
+ 	char *chandata;
+@@ -86,12 +86,12 @@
+ 		return RESULT_SHOWUSAGE;
+ 	}
+ 
+-	ast_pbx_outgoing_app(chantech, AST_FORMAT_SLINEAR, chandata, TIMEOUT * 1000, app, appdata, &reason, 0, NULL, NULL, NULL, NULL, NULL);
++	ast_pbx_outgoing_app(chantech, AST_FORMAT_SLINEAR, chandata, TIMEOUT * 1000, app, appdata, &reason, 0, cid_num, cid_name, NULL, NULL, NULL);
+ 
+ 	return RESULT_SUCCESS;
+ }
+ 
+-static int orig_exten(int fd, const char *chan, const char *data)
++static int orig_exten(int fd, const char *chan, const char *data, const char *cid_num, const char *cid_name)
+ {
+ 	char *chantech;
+ 	char *chandata;
+@@ -117,7 +117,7 @@
+ 	if (ast_strlen_zero(context))
+ 		context = "default";
+ 	
+-	ast_pbx_outgoing_exten(chantech, AST_FORMAT_SLINEAR, chandata, TIMEOUT * 1000, context, exten, 1, &reason, 0, NULL, NULL, NULL, NULL, NULL);
++	ast_pbx_outgoing_exten(chantech, AST_FORMAT_SLINEAR, chandata, TIMEOUT * 1000, context, exten, 1, &reason, 0, cid_num, cid_name, NULL, NULL, NULL);
+ 
+ 	return RESULT_SUCCESS;
+ }
+@@ -133,9 +133,9 @@
+ 	ast_module_ref(ast_module_info->self);
+ 
+ 	if (!strcasecmp("application", argv[2])) {
+-		res = orig_app(fd, argv[1], argv[3], argv[4]);	
++		res = orig_app(fd, argv[1], argv[3], argv[4], argc > 5 ? argv[5] : NULL, argc > 6 ? argv[6] : NULL);
+ 	} else if (!strcasecmp("extension", argv[2])) {
+-		res = orig_exten(fd, argv[1], argv[3]);
++		res = orig_exten(fd, argv[1], argv[3], argc > 4 ? argv[4] : NULL, argc > 5 ? argv[5] : NULL);
+ 	} else
+ 		res = RESULT_SHOWUSAGE;
+ 
+@@ -146,7 +146,7 @@
+ 
+ static char *complete_orig(const char *line, const char *word, int pos, int state)
+ {
+-	static char *choices[] = { "application", "extension", NULL };
++	static char *choices[] = { "application", "extension", "calleidnum", NULL };
+ 	char *ret;
+ 
+ 	if (pos != 2)

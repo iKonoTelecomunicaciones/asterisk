@@ -1,0 +1,11 @@
+--- channels/chan_sip.c	2011-09-19 17:41:02.000000000 -0500
++++ channels/chan_sip.c	2011-09-19 17:41:49.000000000 -0500
+@@ -5271,7 +5271,7 @@
+ 
+ 
+ 	/* Find media streams in this SDP offer */
+-	while ((m = get_sdp_iterate(&iterator, req, "m"))[0] != '\0') {
++    for (m = get_sdp_iterate(&iterator, req, "m"); !ast_strlen_zero(m); m = get_sdp_iterate(&iterator, req, "m")) {
+ 		int x;
+ 		int audio = FALSE;
+ 

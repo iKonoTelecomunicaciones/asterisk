@@ -1,0 +1,11 @@
+--- main/channel.c	2010-11-16 11:43:34.000000000 -0500
++++ main/channel.c	2010-11-16 11:44:21.000000000 -0500
+@@ -3552,6 +3552,8 @@
+ 		ast_log(LOG_DEBUG, "Actually Masquerading %s(%d) into the structure of %s(%d)\n",
+ 			clone->name, clone->_state, original->name, original->_state);
+ 
++	manager_event(EVENT_FLAG_CALL, "Masquerade", "Original: %s\r\nOriginalState: %s\r\nOriginalUniqueid: %s\r\nClone: %s\r\nCloneState: %s\r\nCloneUniqueid: %s\r\n",clone->name, ast_state2str(clone->_state), clone->uniqueid, original->name, ast_state2str(original->_state), original->uniqueid);
++
+ 	/* XXX This is a seriously wacked out operation.  We're essentially putting the guts of
+ 	   the clone channel into the original channel.  Start by killing off the original
+ 	   channel's backend.   I'm not sure we're going to keep this function, because

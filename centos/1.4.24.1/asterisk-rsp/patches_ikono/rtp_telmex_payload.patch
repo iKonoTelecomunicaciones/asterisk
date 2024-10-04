@@ -1,0 +1,12 @@
+--- main/rtp.c        2014-03-20 10:17:33.000000000 -0500
++++ main/rtp.c        2014-03-22 10:33:59.000000000 -0500
+@@ -1435,7 +1435,8 @@
+	[31] = {1, AST_FORMAT_H261},
+	[34] = {1, AST_FORMAT_H263},
+	[103] = {1, AST_FORMAT_H263_PLUS},
+-	[97] = {1, AST_FORMAT_ILBC},
++	[96] = {1, AST_FORMAT_ILBC},
++	[97] = {0, AST_RTP_DTMF},
+	[99] = {1, AST_FORMAT_H264},
+	[101] = {0, AST_RTP_DTMF},
+	[110] = {1, AST_FORMAT_SPEEX},
