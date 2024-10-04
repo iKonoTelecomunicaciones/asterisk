@@ -1,0 +1,48 @@
+Index: apps/app_queue.c
+===================================================================
+--- apps/app_queue.c	(revisión: 151)
++++ apps/app_queue.c	(copia de trabajo)
+@@ -5087,6 +5087,27 @@
+ 	return 0;
+ }
+ 
++static int manager_queue_log(struct mansession *s, const struct message *m)
++{
++	const char *queuename, *event, *message, *agent, *callid;
++
++	queuename = astman_get_header(m, "Queue");
++	callid = astman_get_header(m, "CallID");
++	agent = astman_get_header(m, "Agent");
++	event = astman_get_header(m, "Event");
++	message = astman_get_header(m, "Message");
++
++	if ( ast_strlen_zero(queuename) || ast_strlen_zero(event) ) {
++		astman_send_error(s, m, "Need 'Queue' and 'Event' parameters.");
++		return 0;
++	}
++
++	ast_queue_log(queuename, callid, agent, event, "%s", message);
++	astman_send_ack(s, m, "Event added successfully");
++
++	return 0;
++}
++
+ static int handle_queue_add_member(int fd, int argc, char *argv[])
+ {
+ 	char *queuename, *interface, *membername = NULL, *state_interface = NULL;
+@@ -5313,6 +5334,7 @@
+ 	res |= ast_manager_unregister("QueueAdd");
+ 	res |= ast_manager_unregister("QueueRemove");
+ 	res |= ast_manager_unregister("QueuePause");
++	res |= ast_manager_unregister("QueueLog");
+ 	res |= ast_unregister_application(app_aqm);
+ 	res |= ast_unregister_application(app_rqm);
+ 	res |= ast_unregister_application(app_pqm);
+@@ -5358,6 +5380,7 @@
+ 	res |= ast_manager_register("QueueAdd", EVENT_FLAG_AGENT, manager_add_queue_member, "Add interface to queue.");
+ 	res |= ast_manager_register("QueueRemove", EVENT_FLAG_AGENT, manager_remove_queue_member, "Remove interface from queue.");
+ 	res |= ast_manager_register("QueuePause", EVENT_FLAG_AGENT, manager_pause_queue_member, "Makes a queue member temporarily unavailable");
++	res |= ast_manager_register("QueueLog", EVENT_FLAG_AGENT, manager_queue_log, "Adds custom entry in queue_log");
+ 	res |= ast_custom_function_register(&queueagentcount_function);
+ 	res |= ast_custom_function_register(&queuemembercount_function);
+ 	res |= ast_custom_function_register(&queuememberlist_function);

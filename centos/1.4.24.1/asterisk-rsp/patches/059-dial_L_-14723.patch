@@ -1,0 +1,29 @@
+diff -uNr main/channel.c main/channel.c
+--- main/channel.c	2010-11-11 16:48:37.000000000 +0100
++++ main/channel.c	2010-11-11 16:50:04.000000000 +0100
+@@ -2039,12 +2039,6 @@
+ 		usleep(1);
+ 	}
+ 
+-	if (chan->fdno == -1) {
+-		ast_log(LOG_ERROR, "ast_read() called with no recorded file descriptor.\n");
+-		f = &ast_null_frame;
+-		goto done;
+-	}
+-
+ 	if (chan->masq) {
+ 		if (ast_do_masquerade(chan))
+ 			ast_log(LOG_WARNING, "Failed to perform masquerade\n");
+@@ -2059,6 +2053,12 @@
+ 			ast_deactivate_generator(chan);
+ 		goto done;
+ 	}
++
++	if (chan->fdno == -1) {
++		ast_log(LOG_ERROR, "ast_read() called with no recorded file descriptor.\n");
++		f = &ast_null_frame;
++		goto done;
++	}
+ 	prestate = chan->_state;
+ 
+ 	/* Read and ignore anything on the alertpipe, but read only

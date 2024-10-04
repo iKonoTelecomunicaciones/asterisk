@@ -1,0 +1,37 @@
+--- channels/chan_iax2.c	2011-05-16 11:07:05.000000000 -0500
++++ channels/chan_iax2.c	2009-02-26 12:24:02.000000000 -0500
+@@ -7691,6 +7691,7 @@
+ 							"Uniqueid: %s\r\n",
+ 							iaxs[fr->callno]->owner->name, 
+ 							iaxs[fr->callno]->owner->uniqueid);
++                        ast_queue_log(iaxs[fr->callno]->owner->context, iaxs[fr->callno]->owner->uniqueid, S_OR(iaxs[fr->callno]->owner->cid.cid_num, "NONE"), "HOLD", "%s", iaxs[fr->callno]->owner->name);
+ 					}
+ 
+ 					ast_set_flag(iaxs[fr->callno], IAX_QUELCH);
+@@ -7718,6 +7717,7 @@
+ 							"Uniqueid: %s\r\n",
+ 							iaxs[fr->callno]->owner->name, 
+ 							iaxs[fr->callno]->owner->uniqueid);
++                        ast_queue_log(iaxs[fr->callno]->owner->context, iaxs[fr->callno]->owner->uniqueid, S_OR(iaxs[fr->callno]->owner->cid.cid_num, "NONE"), "UNHOLD", "%s", iaxs[fr->callno]->owner->name);
+ 					}
+ 
+ 					ast_clear_flag(iaxs[fr->callno], IAX_QUELCH);
+diff -uNr asterisk-1.4.24.1_dev/channels/chan_sip.c asterisk-1.4.24.1_rsp/channels/chan_sip.c
+--- channels/chan_sip.c	2011-05-16 11:06:59.000000000 -0500
++++ channels/chan_sip.c	2011-05-16 11:05:18.000000000 -0500
+@@ -5146,12 +5146,14 @@
+ {
+ 	if (global_notifyhold && (!holdstate || !ast_test_flag(&dialog->flags[1], SIP_PAGE2_CALL_ONHOLD)))
+ 		sip_peer_hold(dialog, holdstate);
++	if (global_callevents){
+-	if (global_callevents)
+ 		manager_event(EVENT_FLAG_CALL, holdstate ? "Hold" : "Unhold",
+ 			      "Channel: %s\r\n"
+ 			      "Uniqueid: %s\r\n",
+ 			      dialog->owner->name, 
+ 			      dialog->owner->uniqueid);
++        ast_queue_log(dialog->owner->context, dialog->owner->uniqueid, S_OR(dialog->owner->cid.cid_num, "NONE"), holdstate ? "HOLD" : "UNHOLD", "%s", dialog->owner->name);
++    }
+ 	append_history(dialog, holdstate ? "Hold" : "Unhold", "%s", req->data);
+ 	if (!holdstate) { 	/* Put off remote hold */
+ 		ast_clear_flag(&dialog->flags[1], SIP_PAGE2_CALL_ONHOLD);	/* Clear both flags */

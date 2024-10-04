@@ -1,0 +1,82 @@
+--- apps/app_queue.c	2011-01-13 18:00:55.000000000 -0500
++++ apps/app_queue.c	2011-01-17 11:21:30.000000000 -0500
+@@ -468,7 +468,7 @@
+ 
+ static AST_LIST_HEAD_STATIC(queues, call_queue);
+ 
+-static int set_member_paused(const char *queuename, const char *interface, int paused);
++static int set_member_paused(const char *queuename, const char *interface, int paused, const char *uniqueid);
+ 
+ static void queue_transfer_fixup(void *data, struct ast_channel *old_chan, struct ast_channel *new_chan);
+ static void free_members(struct call_queue *q, int all);
+@@ -2274,7 +2274,7 @@
+ 	ast_queue_log(qe->parent->name, qe->chan->uniqueid, membername, "RINGNOANSWER", "%d|%d", rnatime, reason);
+ 
+ 	if (qe->parent->autopause && pause) {
+-		if (!set_member_paused(qe->parent->name, interface, 1)) {
++		if (!set_member_paused(qe->parent->name, interface, 1, "NONE")) {
+ 			if (option_verbose > 2)
+ 				ast_verbose( VERBOSE_PREFIX_3 "Auto-Pausing Queue Member %s in queue %s since they failed to answer.\n", interface, qe->parent->name);
+ 		} else {
+@@ -3671,7 +3671,7 @@
+ 	return res;
+ }
+ 
+-static int set_member_paused(const char *queuename, const char *interface, int paused)
++static int set_member_paused(const char *queuename, const char *interface, int paused, const char *uniqueid)
+ {
+ 	int found = 0;
+ 	struct call_queue *q;
+@@ -3680,7 +3680,7 @@
+ 	/* Special event for when all queues are paused - individual events still generated */
+ 	/* XXX In all other cases, we use the membername, but since this affects all queues, we cannot */
+ 	if (ast_strlen_zero(queuename))
+-		ast_queue_log("NONE", "NONE", interface, (paused ? "PAUSEALL" : "UNPAUSEALL"), "%s", "");
++		ast_queue_log("NONE", uniqueid, interface, (paused ? "PAUSEALL" : "UNPAUSEALL"), "%s", "");
+ 
+ 	AST_LIST_LOCK(&queues);
+ 	AST_LIST_TRAVERSE(&queues, q, list) {
+@@ -3698,7 +3698,7 @@
+ 				if (mem->realtime)
+ 					update_realtime_member_field(mem, q->name, "paused", paused ? "1" : "0");
+ 
+-				ast_queue_log(q->name, "NONE", mem->membername, (paused ? "PAUSE" : "UNPAUSE"), "%s", "");
++				ast_queue_log(q->name, uniqueid, mem->membername, (paused ? "PAUSE" : "UNPAUSE"), "%s", "");
+ 
+ 				manager_event(EVENT_FLAG_AGENT, "QueueMemberPaused",
+ 					"Queue: %s\r\n"
+@@ -3847,7 +3847,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (set_member_paused(args.queuename, args.interface, 1)) {
++	if (set_member_paused(args.queuename, args.interface, 1, chan->uniqueid)) {
+ 		ast_log(LOG_WARNING, "Attempt to pause interface %s, not found\n", args.interface);
+ 		if (priority_jump || ast_opt_priority_jumping) {
+ 			if (ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101)) {
+@@ -3900,7 +3900,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (set_member_paused(args.queuename, args.interface, 0)) {
++	if (set_member_paused(args.queuename, args.interface, 0, chan->uniqueid)) {
+ 		ast_log(LOG_WARNING, "Attempt to unpause interface %s, not found\n", args.interface);
+ 		if (priority_jump || ast_opt_priority_jumping) {
+ 			if (ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101)) {
+@@ -5148,6 +5148,7 @@
+ 	const char *queuename, *interface, *paused_s;
+ 	int paused;
+ 
++	const char *id = astman_get_header(m,"ActionID");
+ 	interface = astman_get_header(m, "Interface");
+ 	paused_s = astman_get_header(m, "Paused");
+ 	queuename = astman_get_header(m, "Queue");	/* Optional - if not supplied, pause the given Interface in all queues */
+@@ -5159,7 +5160,7 @@
+ 
+ 	paused = abs(ast_true(paused_s));
+ 
+-	if (set_member_paused(queuename, interface, paused))
++	if (set_member_paused(queuename, interface, paused, ast_strlen_zero(id) ? "NONE" : id))
+ 		astman_send_error(s, m, "Interface not found");
+ 	else
+ 		astman_send_ack(s, m, paused ? "Interface paused successfully" : "Interface unpaused successfully");

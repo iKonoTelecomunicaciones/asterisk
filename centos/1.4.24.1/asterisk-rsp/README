@@ -1,0 +1,49 @@
+Asterisk-ES-RSP AutoPatcher
+===========================
+
+AutoPatcher el nuevo instalador para Asterisk-ES-RSP. En lugar de descargar
+un Asterisk completo del repositorio del proyecto RSP, la descarga se
+realizará directamente desde los repositorios de Digium y posteriormente
+se le aplicarán todos los parches necesarios para 'convertirla' en RSP.
+
+De esta manera la instalación consta de un paso adicional, pero a cambio
+se gana en flexibilidad, ya que con AutoPatcher los desarrolladores de RSP
+disponen de un sistema de parcheo más 'limpio'.
+
+Asterisk-ES-RSP: http://asterisk-es-rsp.org
+
+
+Instalación
+-----------
+Pasos para la obtención del código fuente de Asterisk-ES-RSP listo para
+compilar:
+
+1. Descargar el AutoPatcher del repositorio SVN:
+    cd /usr/src
+    svn co http://asterisk-es-rsp.irontec.com/svn/asterisk-es-rsp/branches/asterisk/1.4.24.1 asterisk-rsp
+
+2. Ejecutar AutoPatcher, que descargará Asterisk y lo parcheará automáticamente:
+    cd asterisk-rsp
+    ./get_rsp.py
+
+    Tras ejecutar el comando y esperar a su finalización se obtendrá el 
+    directorio 'asterisk-1.4.24.1_rsp' que contendrá las fuentes de 
+    Asterisk-ES-RSP listas para instalar.
+
+    Si ejecutamos el AutoPatcher por segunda vez nos preguntará si queremos
+    eliminar los directorios exietentes. Es necesario hacerlo, pero si queremos
+    evitar las preguntas podemos ejecutar el AutoPatcher con la opción 'clean':
+
+    ./get_rsp.py --clean
+
+3. Instalar Asterisk-ES-RSP:
+    El proceso a seguir es el mismo que con el Asterisk oficial:
+
+    cd asterisk-1.4.24.1_rsp
+    ./configure
+    make
+    make install
+    make samples
+    make config
+
+

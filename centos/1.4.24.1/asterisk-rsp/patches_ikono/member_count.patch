@@ -1,0 +1,141 @@
+--- apps/app_queue.c	2017-10-10 17:48:29.000000000 -0500
++++ apps/app_queue.c	2021-04-01 12:58:07.204171642 -0500
+@@ -4508,9 +4508,83 @@
+ 	struct ast_module_user *lu;
+ 	struct member *m;
+ 	struct ao2_iterator mem_iter;
++	char *option;
+ 
+ 	buf[0] = '\0';
+-	
++
++	if (ast_strlen_zero(data)) {
++		ast_log(LOG_ERROR, "%s requires an argument: queuename\n", cmd);
++		return -1;
++	}
++
++	if ((option = strchr(data, '|')))
++		*option++ = '\0';
++	else
++		option = "logged";
++
++	ast_log(LOG_DEBUG, "Counting %s agents in %s queue\n", option, data);
++	lu = ast_module_user_add(chan);
++
++	if ((q = load_realtime_queue(data))) {
++		ao2_lock(q);
++		if (!strcasecmp(option, "logged")) {
++			mem_iter = ao2_iterator_init(q->members, 0);
++			while ((m = ao2_iterator_next(&mem_iter))) {
++				/* Count the agents who are logged in and presently answering calls */
++				if ((m->status != AST_DEVICE_UNAVAILABLE) && (m->status != AST_DEVICE_INVALID)) {
++					count++;
++				}
++				ao2_ref(m, -1);
++			}
++		} else if (!strcasecmp(option, "free")) {
++			mem_iter = ao2_iterator_init(q->members, 0);
++			while ((m = ao2_iterator_next(&mem_iter))) {
++				/* Count the agents who are logged in and presently answering calls */
++				if ((m->status == AST_DEVICE_NOT_INUSE) && (!m->paused)) {
++					count++;
++				}
++				ao2_ref(m, -1);
++			}
++		} else if (!strcasecmp(option, "ready")) {
++			time_t now;
++			time(&now);
++			mem_iter = ao2_iterator_init(q->members, 0);
++			while ((m = ao2_iterator_next(&mem_iter))) {
++				/* Count the agents who are logged in, not paused and not wrapping up */
++				if ((m->status == AST_DEVICE_NOT_INUSE) && (!m->paused) &&
++						!(m->lastcall && q->wrapuptime && ((now - q->wrapuptime) < m->lastcall))) {
++					count++;
++				}
++				ao2_ref(m, -1);
++			}
++		} else /* must be "count" */
++			count = q->membercount;
++		ao2_unlock(q);
++	} else
++		ast_log(LOG_WARNING, "queue %s was not found\n", data);
++
++	snprintf(buf, len, "%d", count);
++	ast_module_user_remove(lu);
++
++	return 0;
++}
++
++static int queue_function_qac_dep(struct ast_channel *chan, char *cmd, char *data, char *buf, size_t len)
++{
++	int count = 0;
++	struct call_queue *q;
++	struct ast_module_user *lu;
++	struct member *m;
++	struct ao2_iterator mem_iter;
++	static int depflag = 1;
++
++	if (depflag) {
++		depflag = 0;
++		ast_log(LOG_NOTICE, "The function QUEUE_MEMBER_COUNT has been deprecated in favor of the QUEUE_MEMBER function and will not be in further releases.\n");
++	}
++
++	buf[0] = '\0';
++
+ 	if (ast_strlen_zero(data)) {
+ 		ast_log(LOG_ERROR, "%s requires an argument: queuename\n", cmd);
+ 		return -1;
+@@ -4644,16 +4718,33 @@
+ 	.desc =
+ "Returns the number of members currently associated with the specified queue.\n"
+ "This function is deprecated.  You should use QUEUE_MEMBER_COUNT() instead.\n",
+-	.read = queue_function_qac,
++	.read = queue_function_qac_dep,
+ };
+ 
+ static struct ast_custom_function queuemembercount_function = {
++	.name = "QUEUE_MEMBER",
++	.synopsis = "Count number of members answering a queue",
++	.syntax = "QUEUE_MEMBER(<queuename>[,option])",
++	.desc =
++"Returns the number of members currently associated with the specified queue.\n"
++"option can be any of:\n"
++"    logged - Returns the number of logged-in members for the specified queue.\n"
++"    free - Returns the number of logged-in members for the specified queue that\n"
++"    either can take calls or are currently wrapping up after a previous call.\n"
++"    ready - Returns the number of logged-in members for the specified queue\n"
++"    that are immediately available to answer a call.\n"
++"    count - Returns the total number of members for the specified queue.\n",
++	.read = queue_function_qac,
++};
++
++static struct ast_custom_function queuemembercount_dep = {
+ 	.name = "QUEUE_MEMBER_COUNT",
+ 	.synopsis = "Count number of members answering a queue",
+ 	.syntax = "QUEUE_MEMBER_COUNT(<queuename>)",
+ 	.desc =
+-"Returns the number of members currently associated with the specified queue.\n",
+-	.read = queue_function_qac,
++"Returns the number of members currently associated with the specified queue.\n"
++"This function has been deprecated in favor of the QUEUE_MEMBER() function\n",
++	.read = queue_function_qac_dep,
+ };
+ 
+ static struct ast_custom_function queuewaitingcount_function = {
+@@ -5541,6 +5632,7 @@
+ 	res |= ast_unregister_application(app);
+ 	res |= ast_custom_function_unregister(&queueagentcount_function);
+ 	res |= ast_custom_function_unregister(&queuemembercount_function);
++	res |= ast_custom_function_unregister(&queuemembercount_dep);
+ 	res |= ast_custom_function_unregister(&queuememberlist_function);
+ 	res |= ast_custom_function_unregister(&queuewaitingcount_function);
+ 	ast_devstate_del(statechange_queue, NULL);
+@@ -5581,6 +5673,7 @@
+ 	res |= ast_manager_register("QueueLog", EVENT_FLAG_AGENT, manager_queue_log, "Adds custom entry in queue_log");
+ 	res |= ast_custom_function_register(&queueagentcount_function);
+ 	res |= ast_custom_function_register(&queuemembercount_function);
++	res |= ast_custom_function_register(&queuemembercount_dep);
+ 	res |= ast_custom_function_register(&queuememberlist_function);
+ 	res |= ast_custom_function_register(&queuewaitingcount_function);
+ 	res |= ast_devstate_add(statechange_queue, NULL);
+

@@ -1,0 +1,12 @@
+--- apps/app_dial.c	2011-02-11 10:24:55.000000000 -0500
++++ apps/app_dial.c	2011-02-11 17:45:00.000000000 -0500
+@@ -394,6 +394,9 @@
+ 
+ static void senddialevent(struct ast_channel *src, struct ast_channel *dst)
+ {
++    pbx_builtin_setvar_helper(src,"DSTUNIQUEID",dst->uniqueid);
++    pbx_builtin_setvar_helper(dst,"DSTUNIQUEID",src->uniqueid);
++  
+ 	/* XXX do we need also CallerIDnum ? */
+ 	manager_event(EVENT_FLAG_CALL, "Dial", 
+ 			   "Source: %s\r\n"

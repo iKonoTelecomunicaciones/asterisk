@@ -1,0 +1,93 @@
+--- sounds/Makefile	2009-01-09 18:12:29.000000000 -0500
++++ sounds/Makefile	2010-08-23 17:13:38.000000000 -0500
+@@ -20,7 +20,9 @@
+ MOH_DIR:=$(DESTDIR)$(ASTDATADIR)/moh
+ CORE_SOUNDS_VERSION:=1.4.14
+ EXTRA_SOUNDS_VERSION:=1.4.8
++IKONO_SOUNDS_VERSION:=0.1.0
+ SOUNDS_URL:=http://downloads.digium.com/pub/telephony/sounds/releases
++IKONO_URL:=http://dev.ikono.com.co/sounds/releases
+ MCS:=$(subst -EN-,-en-,$(MENUSELECT_CORE_SOUNDS))
+ MCS:=$(subst -FR-,-fr-,$(MCS))
+ MCS:=$(subst -ES-,-es-,$(MCS))
+@@ -52,12 +54,21 @@
+ MM:=$(subst -G722,-g722,$(MM))
+ MOH:=$(MM:MOH-%=asterisk-moh-%.tar.gz)
+ MOH_TAGS:=$(MM:MOH-%=$(MOH_DIR)/.asterisk-moh-%)
++MIS:=$(subst -ES-,-es-,$(MENUSELECT_IKONO_SOUNDS))
++MIS:=$(subst -WAV,-wav,$(MIS))
++MIS:=$(subst -ULAW,-ulaw,$(MIS))
++MIS:=$(subst -ALAW,-alaw,$(MIS))
++MIS:=$(subst -GSM,-gsm,$(MIS))
++MIS:=$(subst -G729,-g729,$(MIS))
++MIS:=$(subst -G722,-g722,$(MIS))
++IKONO_SOUNDS:=$(MIS:IKONO-SOUNDS-%=asterisk-ikono-sounds-%-$(IKONO_SOUNDS_VERSION).tar.gz)
++IKONO_SOUND_TAGS:=$(MIS:IKONO-SOUNDS-%=$(SOUNDS_DIR)/.asterisk-ikono-sounds-%-$(IKONO_SOUNDS_VERSION))
+ # If "fetch" is used, --continue is not a valid option.
+ ifeq ($(WGET),wget)
+ WGET_ARGS:=--continue
+ endif
+ 
+-all: $(CORE_SOUNDS) $(EXTRA_SOUNDS) $(MOH)
++all: $(CORE_SOUNDS) $(EXTRA_SOUNDS) $(MOH) $(IKONO_SOUNDS)
+ 
+ have_download:
+ 	@if test "$(DOWNLOAD)" = ":" ; then \
+@@ -130,6 +141,17 @@
+ 	(cd $(MOH_DIR); cat $(PWD)/$${PACKAGE} | gzip -d | tar xof -) && \
+ 	touch $@
+ 
++$(SOUNDS_DIR)/.asterisk-ikono-sounds-es-%: have_download
++	if [ -z "usersvnikono" ]; then read -p "Username: " usersvnikono; fi
++	if [ -z "passwsvnikono" ]; then stty -echo; read -p "Password: " passwsvnikono; stty -echo; fi
++	@PACKAGE=$(subst $(SOUNDS_DIR)/.asterisk,asterisk,$@).tar.gz; \
++	if test ! -f $${PACKAGE}; then $(DOWNLOAD) $(WGET_ARGS) --user=prueba --password=prueba $(IKONO_URL)/$${PACKAGE}; fi; \
++	if test ! -f $${PACKAGE}; then exit 1; fi; \
++	rm -f $(subst -$(IKONO_SOUNDS_VERSION),,$@)-* && \
++	(cd $(SOUNDS_DIR)/ikono; cat $(PWD)/$${PACKAGE} | gzip -d | tar xof -) && \
++	touch $@
++
++
+ asterisk-core-%.tar.gz: have_download
+ 	@if test ! -f $@ ;then $(DOWNLOAD) $(WGET_ARGS) $(SOUNDS_URL)/$@;fi
+ 
+@@ -139,13 +161,16 @@
+ asterisk-moh-%.tar.gz: have_download
+ 	@if test ! -f $@ ;then $(DOWNLOAD) $(WGET_ARGS) $(SOUNDS_URL)/$@;fi
+ 
++asterisk-ikono-%.tar.gz: have_download
++	@if test ! -f $@ ;then $(DOWNLOAD) $(WGET_ARGS) $(IKONO_URL)/$@;fi
++
+ dist-clean:
+ 	rm -f *.tar.gz
+ 
+-$(SOUNDS_DIR) $(MOH_DIR) $(SOUNDS_DIR)/es $(SOUNDS_DIR)/fr:
++$(SOUNDS_DIR) $(MOH_DIR) $(SOUNDS_DIR)/es $(SOUNDS_DIR)/fr $(SOUNDS_DIR)/ikono:
+ 	mkdir -p $@
+ 
+-install: $(SOUNDS_DIR) $(SOUNDS_DIR)/es $(SOUNDS_DIR)/fr $(MOH_DIR) $(CORE_SOUND_TAGS) $(EXTRA_SOUND_TAGS) $(MOH_TAGS)
++install: $(SOUNDS_DIR) $(SOUNDS_DIR)/es $(SOUNDS_DIR)/fr $(SOUNDS_DIR)/ikono $(MOH_DIR) $(CORE_SOUND_TAGS) $(EXTRA_SOUND_TAGS) $(MOH_TAGS) $(IKONO_SOUND_TAGS)
+ 
+ uninstall:
+ 	rm -rf $(SOUNDS_DIR)
+	
+--- sounds/sounds.xml	2006-10-25 12:08:58.000000000 -0500
++++ sounds/sounds.xml	2010-08-20 17:08:23.000000000 -0500
+@@ -66,3 +66,17 @@
+ 		<member name="EXTRA-SOUNDS-EN-G722" displayname="English, G.722 format">
+ 		</member>
+ 	</category>
++	<category name="MENUSELECT_IKONO_SOUNDS" displayname="iKono Sound Packages" positive_output="yes">
++		<member name="IKONO-SOUNDS-ES-WAV" displayname="Spanish, WAV format">
++		</member>
++		<member name="IKONO-SOUNDS-ES-ULAW" displayname="Spanish, mu-Law format">
++		</member>
++		<member name="IKONO-SOUNDS-ES-ALAW" displayname="Spanish, a-Law format">
++		</member>
++		<member name="IKONO-SOUNDS-ES-GSM" displayname="Spanish, GSM format">
++		</member>
++		<member name="IKONO-SOUNDS-ES-G729" displayname="Spanish, G.729 format">
++		</member>
++		<member name="IKONO-SOUNDS-ES-G722" displayname="Spanish, G.722 format">
++		</member>
++	</category>

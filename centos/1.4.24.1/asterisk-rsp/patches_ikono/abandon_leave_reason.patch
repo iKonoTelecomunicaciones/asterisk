@@ -1,0 +1,212 @@
+Index: apps/app_queue.c
+===================================================================
+--- apps/app_queue.c    (revisión: 151)
++++ apps/app_queue.c    (copia de trabajo)
+@@ -302,6 +302,7 @@
+ 	QUEUE_JOINUNAVAIL = 4,
+ 	QUEUE_LEAVEUNAVAIL = 5,
+ 	QUEUE_FULL = 6,
++	QUEUE_ABANDON = 7,
+ };
+ 
+ const struct {
+@@ -315,6 +316,7 @@
+ 	{ QUEUE_JOINUNAVAIL, "JOINUNAVAIL" },
+ 	{ QUEUE_LEAVEUNAVAIL, "LEAVEUNAVAIL" },
+ 	{ QUEUE_FULL, "FULL" },
++	{ QUEUE_ABANDON, "ABANDON" },
+ };
+ 
+ /*! \brief We define a custom "local user" structure because we
+@@ -474,6 +476,7 @@
+ static void free_members(struct call_queue *q, int all);
+ 
+ static char *int2strat(int strategy);
++static char *int2result(enum queue_result res);
+ 
+ static inline struct call_queue *queue_ref(struct call_queue *q)
+ {
+@@ -565,6 +568,16 @@
+ 	}
+ }
+ 
++static char *int2result(enum queue_result res)
++{
++	int i;
++
++	for (i = 0; i < sizeof(queue_results) / sizeof(queue_results[0]); i++)
++		if (queue_results[i].id == res)
++			return queue_results[i].text;
++        return "UNKNOWN";
++}
++
+ static char *int2strat(int strategy)
+ {
+ 	int x;
+@@ -1814,7 +1827,7 @@
+ }
+ 
+ 
+-static void leave_queue(struct queue_ent *qe)
++static void leave_queue(struct queue_ent *qe, char *reason)
+ {
+ 	struct call_queue *q;
+ 	struct queue_ent *cur, *prev = NULL;
+@@ -1831,8 +1844,8 @@
+ 
+ 			/* Take us out of the queue */
+ 			manager_event(EVENT_FLAG_CALL, "Leave",
+-				"Channel: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\n",
+-				qe->chan->name, q->name,  q->count, qe->chan->uniqueid);
++				"Channel: %s\r\nQueue: %s\r\nCount: %d\r\nUniqueid: %s\r\nReason: %s\r\n",
++				qe->chan->name, q->name,  q->count, qe->chan->uniqueid, reason);
+ 			if (option_debug)
+ 				ast_log(LOG_DEBUG, "Queue '%s' Leave, Channel '%s'\n", q->name, qe->chan->name );
+ 			/* Take us out of the queue */
+@@ -2237,7 +2250,7 @@
+ 	return res;
+ }
+ 
+-static void record_abandoned(struct queue_ent *qe)
++static void record_abandoned(struct queue_ent *qe, char *reason)
+ {
+ 	ao2_lock(qe->parent);
+ 	manager_event(EVENT_FLAG_AGENT, "QueueCallerAbandon",
+@@ -2245,8 +2258,9 @@
+ 		"Uniqueid: %s\r\n"
+ 		"Position: %d\r\n"
+ 		"OriginalPosition: %d\r\n"
++		"Reason: %s\r\n"
+ 		"HoldTime: %d\r\n",
+-		qe->parent->name, qe->chan->uniqueid, qe->pos, qe->opos, (int)(time(NULL) - qe->start));
++		qe->parent->name, qe->chan->uniqueid, qe->pos, qe->opos, reason, (int)(time(NULL) - qe->start));
+ 
+ 	qe->parent->callsabandoned++;
+ 	ao2_unlock(qe->parent);
+@@ -2671,7 +2685,7 @@
+ 		if (qe->parent->leavewhenempty && (stat == QUEUE_NO_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEEMPTY;
+ 			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEEMPTY");
+-			leave_queue(qe);
++			leave_queue(qe, "EXITEMPTY");
+ 			break;
+ 		}
+ 
+@@ -2679,7 +2693,7 @@
+ 		if ((qe->parent->leavewhenempty == QUEUE_EMPTY_STRICT) && (stat == QUEUE_NO_REACHABLE_MEMBERS)) {
+ 			*reason = QUEUE_LEAVEUNAVAIL;
+ 			ast_queue_log(qe->parent->name, qe->chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe->pos, qe->opos, (long)time(NULL) - qe->start, "LEAVEUNAVAIL");
+-			leave_queue(qe);
++			leave_queue(qe, "EXITEMPTY");
+ 			break;
+ 		}
+ 
+@@ -3269,7 +3283,7 @@
+ 				/* Caller must have hung up just before being connected*/
+ 				ast_log(LOG_NOTICE, "Caller was about to talk to agent on %s but the caller hungup.\n", peer->name);
+ 				ast_queue_log(queuename, qe->chan->uniqueid, member->membername, "ABANDON", "%d|%d|%ld|%ld", qe->pos, qe->opos, (long)time(NULL) - qe->start, endattemps);
+-				record_abandoned(qe);
++				record_abandoned(qe, "ABANDONBEFORECONNECT");
+ 				ast_hangup(peer);
+ 				ao2_ref(member, -1);
+ 				return -1;
+@@ -3285,7 +3299,7 @@
+ 		if (res < 0) {
+ 		    ast_queue_log(queuename, qe->chan->uniqueid, member->membername, "SYSCOMPAT", "%ld|%d|%d", endattemps, qe->pos, qe->opos);
+ 			ast_log(LOG_WARNING, "Had to drop call because I couldn't make %s compatible with %s\n", qe->chan->name, peer->name);
+-			record_abandoned(qe);
++			record_abandoned(qe, "SYSCOMPAT");
+ 			ast_hangup(peer);
+ 			ao2_ref(member, -1);
+ 			return -1;
+@@ -3389,7 +3403,7 @@
+ 			}
+ 		}
+ 		/* Drop out of the queue at this point, to prepare for next caller */
+-		leave_queue(qe);			
++		leave_queue(qe, "CONNECT");			
+ 		if (!ast_strlen_zero(url) && ast_channel_supports_html(peer)) {
+ 			if (option_debug)
+ 				ast_log(LOG_DEBUG, "app_queue: sendurl=%s.\n", url);
+@@ -4263,7 +4277,7 @@
+ 
+ 			/* Leave if we have exceeded our queuetimeout */
+ 			if (qe.expire && (time(NULL) >= qe.expire)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITWITHTIMEOUT");
+ 				reason = QUEUE_TIMEOUT;
+ 				res = 0;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHTIMEOUT", "%d|%ld|%d", qe.pos,(long) (time(NULL) - qe.start), qe.opos);
+@@ -4281,7 +4295,7 @@
+ 
+ 			/* Leave if we have exceeded our queuetimeout */
+ 			if (qe.expire && (time(NULL) >= qe.expire)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITWITHTIMEOUT");
+ 				reason = QUEUE_TIMEOUT;
+ 				res = 0;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHTIMEOUT", "%d|%ld|%d", qe.pos,(long) (time(NULL) - qe.start), qe.opos);
+@@ -4294,7 +4308,7 @@
+ 
+ 			/* Leave if we have exceeded our queuetimeout */
+ 			if (qe.expire && (time(NULL) >= qe.expire)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITWITHTIMEOUT");
+ 				reason = QUEUE_TIMEOUT;
+ 				res = 0;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHTIMEOUT", "%d|%ld|%d", qe.pos,(long) (time(NULL) - qe.start), qe.opos);
+@@ -4312,7 +4326,7 @@
+ 				if (option_verbose > 2)
+ 					ast_verbose(VERBOSE_PREFIX_3 "Exiting on time-out cycle\n");
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHTIMEOUT", "%d|%ld|%d", qe.pos,(long) (time(NULL) - qe.start), qe.opos);
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITWITHTIMEOUT");
+ 				reason = QUEUE_TIMEOUT;
+ 				res = 0;
+ 				break;
+@@ -4320,7 +4334,7 @@
+ 
+ 			/* leave the queue if no agents, if enabled */
+ 			if (qe.parent->leavewhenempty && (stat == QUEUE_NO_MEMBERS)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITEMPTY");
+ 				reason = QUEUE_LEAVEEMPTY;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe.pos, qe.opos, (long)(time(NULL) - qe.start), "LEAVEEMPTY");
+ 				res = 0;
+@@ -4329,7 +4343,7 @@
+ 
+ 			/* leave the queue if no reachable agents, if enabled */
+ 			if ((qe.parent->leavewhenempty == QUEUE_EMPTY_STRICT) && (stat == QUEUE_NO_REACHABLE_MEMBERS)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITEMPTY");
+ 				reason = QUEUE_LEAVEUNAVAIL;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITEMPTY", "%d|%d|%ld|%s", qe.pos, qe.opos, (long)(time(NULL) - qe.start), "LEAVEUNAVAIL");
+ 				res = 0;
+@@ -4338,7 +4352,7 @@
+ 
+ 			/* Leave if we have exceeded our queuetimeout */
+ 			if (qe.expire && (time(NULL) >= qe.expire)) {
+-				record_abandoned(&qe);
++				record_abandoned(&qe, "EXITWITHTIMEOUT");
+ 				reason = QUEUE_TIMEOUT;
+ 				res = 0;
+ 				ast_queue_log(args.queuename, chan->uniqueid, "NONE", "EXITWITHTIMEOUT", "%d|%ld|%d", qe.pos,(long) (time(NULL) - qe.start), qe.opos);
+@@ -4369,7 +4383,8 @@
+ 		if (res) {
+ 			if (res < 0) {
+ 				if (!qe.handled) {
+-					record_abandoned(&qe);
++					record_abandoned(&qe, "ABANDON");
++				        reason = QUEUE_ABANDON;
+ 					ast_queue_log(args.queuename, chan->uniqueid, "NONE", "ABANDON",
+ 						"%d|%d|%ld|%s", qe.pos, qe.opos, (long) time(NULL) - qe.start, "NONE");
+ 				}
+@@ -4390,7 +4405,7 @@
+ 			}			
+ 			ast_stopstream(chan);
+ 		}
+-		leave_queue(&qe);
++		leave_queue(&qe, int2result(reason));
+ 		if (reason != QUEUE_UNKNOWN)
+ 			set_queue_result(chan, reason);
+ 	} else {

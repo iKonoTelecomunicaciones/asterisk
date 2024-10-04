@@ -1,0 +1,12 @@
+diff -rNu asterisk-1.4.24.1_rsp/main/asterisk.c asterisk-1.4.24.1_rsp-dev//main/asterisk.c
+--- main/asterisk.c	2012-09-05 14:31:33.377374923 -0500
++++ main/asterisk.c	2012-09-05 14:48:40.389372169 -0500
+@@ -238,7 +238,7 @@
+ char ast_config_AST_CTL_OWNER[PATH_MAX] = "\0";
+ char ast_config_AST_CTL_GROUP[PATH_MAX] = "\0";
+ char ast_config_AST_CTL[PATH_MAX] = "asterisk.ctl";
+-char ast_config_AST_SYSTEM_NAME[20] = "";
++char ast_config_AST_SYSTEM_NAME[PATH_MAX] = "";
+ 
+ extern const char *ast_build_hostname;
+ extern const char *ast_build_kernel;

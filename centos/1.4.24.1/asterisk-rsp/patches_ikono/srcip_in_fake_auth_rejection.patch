@@ -1,0 +1,20 @@
+--- channels/chan_sip.c	2014-02-27 10:25:07.000000000 -0500
++++ channels/chan_sip.c	2014-03-19 09:32:34.000000000 -0500
+@@ -14724,7 +14724,7 @@
+ 		}
+ 		if (res < 0) { /* Something failed in authentication */
+ 			if (res == AUTH_FAKE_AUTH) {
+-				ast_log(LOG_NOTICE, "Sending fake auth rejection for user %s\n", get_header(req, "From"));
++				ast_log(LOG_NOTICE, "Sending fake auth rejection for device '%s' to '%s'\n", get_header(req, "From"), ast_inet_ntoa(sin->sin_addr));
+ 				transmit_fake_auth_response(p, SIP_INVITE, req, XMIT_RELIABLE);
+ 			} else {
+   				ast_log(LOG_NOTICE, "Failed to authenticate user %s\n", get_header(req, "From"));
+@@ -15769,7 +15769,7 @@
+ 	}
+ 	if (res < 0) {
+ 		if (res == AUTH_FAKE_AUTH) {
+-			ast_log(LOG_NOTICE, "Sending fake auth rejection for user %s\n", get_header(req, "From"));
++			ast_log(LOG_NOTICE, "Sending fake auth rejection for device '%s' to '%s'\n", get_header(req, "From"), ast_inet_ntoa(sin->sin_addr));
+ 			transmit_fake_auth_response(p, SIP_SUBSCRIBE, req, XMIT_UNRELIABLE);
+ 		} else {
+ 			ast_log(LOG_NOTICE, "Failed to authenticate user %s for SUBSCRIBE\n", get_header(req, "From"));

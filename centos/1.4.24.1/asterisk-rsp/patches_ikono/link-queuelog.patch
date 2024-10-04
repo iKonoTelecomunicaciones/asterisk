@@ -1,0 +1,11 @@
+--- main/channel.c	2010-11-16 15:11:01.000000000 -0500
++++ main/channel.c	2010-11-16 15:07:47.000000000 -0500
+@@ -4138,6 +4132,8 @@
+ 		      "CallerID2: %s\r\n",
+ 		      c0->name, c1->name, c0->uniqueid, c1->uniqueid, c0->cid.cid_num, c1->cid.cid_num);
+ 
++	ast_queue_log(S_OR(c0->context, ""), S_OR(c0->uniqueid, ""), S_OR(c0->cid.cid_num, ""), "LINK", "%s|%s|%s", S_OR(c1->uniqueid, ""), S_OR(c0->name, ""), S_OR(c1->name, ""));
++
+ 	o0nativeformats = c0->nativeformats;
+ 	o1nativeformats = c1->nativeformats;
+ 

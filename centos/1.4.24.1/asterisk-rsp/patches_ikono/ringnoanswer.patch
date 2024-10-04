@@ -1,0 +1,81 @@
+--- apps/app_queue.c	2010-08-23 15:35:42.000000000 -0500
++++ apps/app_queue.c	2010-08-23 15:33:56.000000000 -0500
+@@ -2241,7 +2241,7 @@
+ }
+ 
+ /*! \brief RNA == Ring No Answer. Common code that is executed when we try a queue member and they don't answer. */
+-static void rna(int rnatime, struct queue_ent *qe, char *interface, char *membername, int pause)
++static void rna(int rnatime, struct queue_ent *qe, char *interface, char *membername, int pause, int reason)
+ {
+ 	if (option_verbose > 2)
+ 		ast_verbose( VERBOSE_PREFIX_3 "Nobody picked up in %d ms\n", rnatime);
+@@ -2251,7 +2251,28 @@
+                 ast_moh_start(qe->chan, qe->moh, NULL);
+         }
+ 
+-	ast_queue_log(qe->parent->name, qe->chan->uniqueid, membername, "RINGNOANSWER", "%d", rnatime);
++	if (qe->parent->eventwhencalled) {
++	  char vars[2048];
++
++	  manager_event(EVENT_FLAG_AGENT, "AgentRingNoAnswer",
++			"Queue: %s\r\n"
++			"Uniqueid: %s\r\n"
++			"Channel: %s\r\n"
++			"Member: %s\r\n"
++			"MemberName: %s\r\n"
++			"Ringtime: %d\r\n"
++			"%s",
++			qe->parent->name,
++			qe->chan->uniqueid,
++			qe->chan->name,
++			interface,
++			membername,
++			rnatime,
++			qe->parent->eventwhencalled == QUEUE_EVENT_VARIABLES ? vars2manager(qe->chan, vars, sizeof(vars)) : "");
++	}
++	  
++	ast_queue_log(qe->parent->name, qe->chan->uniqueid, membername, "RINGNOANSWER", "%d|%d", rnatime, reason);
++
+ 	if (qe->parent->autopause && pause) {
+ 		if (!set_member_paused(qe->parent->name, interface, 1)) {
+ 			if (option_verbose > 2)
+@@ -2426,10 +2447,10 @@
+ 								ast_verbose( VERBOSE_PREFIX_3 "%s is busy\n", o->chan->name);
+ 							if (in->cdr)
+ 								ast_cdr_busy(in->cdr);
+-							do_hang(o);
+ 							endtime = (long)time(NULL);
+ 							endtime -= starttime;
+-							rna(endtime * 1000, qe, on, membername, 0);
++							rna(endtime * 1000, qe, on, membername, 0, o->chan->hangupcause);
++							do_hang(o);
+ 							if (qe->parent->strategy != QUEUE_STRATEGY_RINGALL) {
+ 								if (qe->parent->timeoutrestart)
+ 									*to = orig;
+@@ -2444,7 +2465,7 @@
+ 								ast_cdr_busy(in->cdr);
+ 							endtime = (long)time(NULL);
+ 							endtime -= starttime;
+-							rna(endtime * 1000, qe, on, membername, 0);
++							rna(endtime * 1000, qe, on, membername, 0, o->chan->hangupcause);
+ 							do_hang(o);
+ 							if (qe->parent->strategy != QUEUE_STRATEGY_RINGALL) {
+ 								if (qe->parent->timeoutrestart)
+@@ -2473,7 +2494,7 @@
+ 					ast_frfree(f);
+ 				} else {
+ 					endtime = (long) time(NULL) - starttime;
+-					rna(endtime * 1000, qe, on, membername, 1);
++					rna(endtime * 1000, qe, on, membername, 1, o->chan->hangupcause);
+ 					do_hang(o);
+ 					if (qe->parent->strategy != QUEUE_STRATEGY_RINGALL) {
+ 						if (qe->parent->timeoutrestart)
+@@ -2511,7 +2532,7 @@
+ 		}
+ 		if (!*to) {
+ 			for (o = start; o; o = o->call_next)
+-				rna(orig, qe, o->interface, o->member->membername, 1);
++				rna(orig, qe, o->interface, o->member->membername, 1, AST_CAUSE_NOANSWER);
+ 		}
+ 	}
+ 
