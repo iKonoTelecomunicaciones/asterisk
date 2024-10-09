@@ -1,10 +1,7 @@
 make install
 make samples
 
-chown -R asterisk:asterisk /etc/asterisk \
-                           /var/*/asterisk \
-                           /usr/*/asterisk \
-                           /usr/lib64/asterisk
+find /etc/asterisk /var/*/asterisk /usr/*/asterisk /usr/lib64/asterisk ! -user asterisk -exec chown asterisk:asterisk {} +
 chmod -R 750 /var/spool/asterisk
 
 cd /

@@ -1,0 +1,6 @@
+docker-compose*
+deploy/
+Dockerfile
+.git*
+.dockerignore
+README*
