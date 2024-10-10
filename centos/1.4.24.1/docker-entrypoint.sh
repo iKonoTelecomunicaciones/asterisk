@@ -50,7 +50,7 @@ alternatives --set mta /usr/sbin/sendmail.ssmtp
 
 # Load modules
 asterisk_modules_dir="/usr/lib/asterisk/modules"
-for codec in /opt/volumes/modules/*.so; do
+for codec in $(ls /opt/volumes/modules/); do
   if [ ! -f $asterisk_modules_dir/$(basename $codec) ]; then
     cp $codec $asterisk_modules_dir/
     chmod u+x $asterisk_modules_dir/$(basename $codec)
