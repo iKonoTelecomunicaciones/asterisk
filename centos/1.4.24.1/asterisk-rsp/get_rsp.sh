@@ -17,8 +17,10 @@ wget -qO- https://downloads.asterisk.org/pub/telephony/asterisk/releases/asteris
 validateExitStatus $?
 echo "Asterisk fetch complete!"
 
-echo "Feching lcdial from svn repository"
-svn export --quiet --no-auth-cache --username $SVN_USER --password $SVN_PASS "$SVN_REPO/app_asterisk/app_lcdial/trunk/" asterisk-${ASTERISK_VERSION}/lcdial
+echo "Feching lcdial from git repository"
+lcdial_path="asterisk-${ASTERISK_VERSION}/lcdial"
+mkdir -p "$lcdial_path"
+git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@${REPO_URL#https://} "$lcdial_path"
 validateExitStatus $?
 echo "LCDial fetch complete!"
 

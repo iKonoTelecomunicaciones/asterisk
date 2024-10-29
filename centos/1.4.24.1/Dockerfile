@@ -12,7 +12,6 @@ RUN yum update -y && \
     yum -y install \
     git \
     libpcap-devel \
-    subversion \
     patch \
     wget && \
     yum clean all && \
@@ -115,9 +114,6 @@ RUN yum -y install \
 
 # Update pip
 RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | python
-
-# Copy packages
-COPY packages packages
 
 # Copy requirements.txt to the container
 COPY requirements.txt .

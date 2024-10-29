@@ -2,4 +2,4 @@ PyYAML==5.4.1
 mysql-python==1.2.5
 requests==2.27.1
 git+https://gitlab.com/iKono/cm-librerias.git
-./packages/pyst-0.2.tar.gz
+git+https://gitlab.com/iKono/pyst.git
