@@ -22,6 +22,7 @@ lcdial_path="asterisk-${ASTERISK_VERSION}/lcdial"
 mkdir -p "$lcdial_path"
 git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@${REPO_URL#https://} "$lcdial_path"
 validateExitStatus $?
+rm -rf "$lcdial_path/.git"
 echo "LCDial fetch complete!"
 
 echo "Patching Asterisk in asterisk-${ASTERISK_VERSION}"
