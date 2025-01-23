@@ -18,9 +18,6 @@ cd /usr/src/asterisk/addons
 curl -vsL http://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-addons-${ASTERISK_ADDONS_VERSION}.tar.gz | tar --strip-components 1 -xz
 
 cd /usr/src/asterisk
-#curl -vsL http://downloads.asterisk.org/pub/telephony/asterisk/old-releases/asterisk-${ASTERISK_VERSION}.tar.gz | tar --strip-components 1 -xz
-#cp -r /asterisk-${ASTERISK_VERSION}/* .
-#curl -vsL -u ${AUTH_USER}:${AUTH_PASS} https://${DOMAIN}/downloads/asterisk/asterisk-${ASTERISK_VERSION}_rsp-13.tar.gz | tar --strip-components 1 -xz
 
 # 1.5 jobs per core works out okay
 : ${JOBS:=$(( $(nproc) + $(nproc) / 2 ))}
@@ -28,19 +25,17 @@ cd /usr/src/asterisk
 mkdir -p /etc/asterisk/ \
          /var/spool/asterisk/fax
 
-./configure #--libdir=/usr/lib64
-make menuselect/menuselect menuselect-tree menuselect.makeopts
-
-# we don't need any sounds in docker, they will be mounted as volume
-#menuselect/menuselect --disable-category MENUSELECT_CORE_SOUNDS menuselect.makeopts
-#menuselect/menuselect --disable-category MENUSELECT_MOH menuselect.makeopts
-#menuselect/menuselect --disable-category MENUSELECT_EXTRA_SOUNDS menuselect.makeopts
-
-make -j ${JOBS} all
+./configure
+make -j ${JOBS}
+sed -i -e "
+s/\(MENUSELECT_CORE_SOUNDS=\).*/\1CORE-SOUNDS-EN-WAV CORE-SOUNDS-EN-ULAW CORE-SOUNDS-EN-ALAW CORE-SOUNDS-EN-GSM CORE-SOUNDS-EN-G729 CORE-SOUNDS-EN-G722/g
+s/\(MENUSELECT_MOH=\).*/\1MOH-FREEPLAY-WAV MOH-FREEPLAY-ULAW MOH-FREEPLAY-ALAW MOH-FREEPLAY-GSM MOH-FREEPLAY-G729 MOH-FREEPLAY-G722/g
+s/\(MENUSELECT_EXTRA_SOUNDS=\).*/\1EXTRA-SOUNDS-EN-WAV EXTRA-SOUNDS-EN-ULAW EXTRA-SOUNDS-EN-ALAW EXTRA-SOUNDS-EN-GSM EXTRA-SOUNDS-EN-G729 EXTRA-SOUNDS-EN-G722/g
+s/\(MENUSELECT_IKONO_SOUNDS=\).*/\1IKONO-SOUNDS-ES-WAV IKONO-SOUNDS-ES-ULAW IKONO-SOUNDS-ES-ALAW IKONO-SOUNDS-ES-GSM IKONO-SOUNDS-ES-G729 IKONO-SOUNDS-ES-G722/g
+" menuselect.makeopts
 make install
+make config
 
-# copy default configs
-# cp /usr/src/asterisk/configs/basic-pbx/*.conf /etc/asterisk/
 make samples
 make dist-clean
 
@@ -51,16 +46,16 @@ sed -i -e 's/# MAXFILES=/MAXFILES=/' /usr/sbin/safe_asterisk
 cd /usr/src/asterisk/addons
 
 ./configure --libdir=/usr/lib64
-make menuselect/menuselect menuselect-tree menuselect.makeopts
+make -j ${JOBS}
 
-make -j ${JOBS} all
+sed -i -e "
+s/\(MENUSELECT_RES=\).*/\1MENUSELECT_RES=res_config_mysql/g
+" menuselect.makeopts
+
 make install
 make samples
 
-chown -R asterisk:asterisk /etc/asterisk \
-                           /var/*/asterisk \
-                           /usr/*/asterisk \
-                           /usr/lib64/asterisk
+find /etc/asterisk /var/*/asterisk /usr/*/asterisk /usr/lib64/asterisk ! -user asterisk -exec chown asterisk:asterisk {} +
 chmod -R 750 /var/spool/asterisk
 
 cd /
