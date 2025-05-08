@@ -139,4 +139,4 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 WORKDIR /etc/asterisk
 
 # Start Asterisk
-CMD ["/usr/sbin/asterisk", "-vvvdddf", "-T", "-U", "asterisk", "-p"]
+CMD ["/usr/sbin/asterisk", "-vvvf", "-T", "-U", "asterisk", "-p"]

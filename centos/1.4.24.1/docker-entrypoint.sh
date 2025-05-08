@@ -63,12 +63,12 @@ find /{usr,var}/{lib,log,run,spool}/asterisk /etc/asterisk ! -user ${ASTERISK_US
 
 ASTERISK_GROUP=$(id -n -g ${ASTERISK_GID})
 if [ "$1" = "" ]; then
-  COMMAND="/usr/sbin/asterisk -T -U ${ASTERISK_USER} -G ${ASTERISK_GROUP} -p -vvvdddf"
+  COMMAND="/usr/sbin/asterisk -T -U ${ASTERISK_USER} -G ${ASTERISK_GROUP} -p -vvvf"
 else
   COMMAND="$@"
 fi
 
 # Remove this after the Dockerfile ARGS are corrected
-COMMAND="/usr/sbin/asterisk -T -U ${ASTERISK_USER} -G ${ASTERISK_GROUP} -p -vvvdddf"
+COMMAND="/usr/sbin/asterisk -T -U ${ASTERISK_USER} -G ${ASTERISK_GROUP} -p -vvvf"
 
 exec ${COMMAND}
